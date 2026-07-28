@@ -37,6 +37,8 @@ struct ContentView: View {
             .padding(.bottom, 8)
 
             ForEach(AppModel.Section.allCases) { section in
+                let selected = model.selectedSection == section
+                let controllerFocused = selected && model.selectedRow < 0
                 Button {
                     model.selectSection(section)
                 } label: {
@@ -48,10 +50,15 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
-                    .background(model.selectedSection == section ? Color.accentColor.opacity(0.18) : Color.clear)
+                    .background(selected ? Color.accentColor.opacity(controllerFocused ? 0.25 : 0.14) : Color.clear)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(controllerFocused ? Color.accentColor : Color.clear, lineWidth: 2)
+                    }
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("\(section.rawValue) section\(controllerFocused ? ", controller focused" : "")")
             }
 
             Spacer()
@@ -147,17 +154,18 @@ struct ContentView: View {
     }
 
     private func itemRow(_ item: AppModel.UIItem, index: Int) -> some View {
-        Button {
+        let controllerFocused = model.selectedRow >= 0 && index == model.selectedRow
+        return Button {
             model.selectedRow = index
             item.activate()
         } label: {
             HStack(spacing: 14) {
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(index == model.selectedRow ? Color.accentColor : Color.secondary.opacity(0.25))
+                    .fill(controllerFocused ? Color.accentColor : Color.secondary.opacity(0.25))
                     .frame(width: 5)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.title)
-                        .fontWeight(index == model.selectedRow ? .semibold : .regular)
+                        .fontWeight(controllerFocused ? .semibold : .regular)
                     Text(item.detail)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -165,22 +173,24 @@ struct ContentView: View {
                 }
                 Spacer()
                 if item.kind == .adjustable {
-                    Image(systemName: "chevron.left.chevron.right")
+                    Image(systemName: "minus.forwardslash.plus")
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel("Adjust with LB and RB")
                 } else if item.kind == .action {
                     Image(systemName: "button.programmable")
                         .foregroundStyle(.secondary)
                 }
             }
             .padding(14)
-            .background(index == model.selectedRow ? Color.accentColor.opacity(0.11) : Color(nsColor: .controlBackgroundColor))
+            .background(controllerFocused ? Color.accentColor.opacity(0.11) : Color(nsColor: .controlBackgroundColor))
             .overlay {
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(index == model.selectedRow ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: index == model.selectedRow ? 2 : 1)
+                    .stroke(controllerFocused ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: controllerFocused ? 2 : 1)
             }
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(item.title). \(item.detail)\(controllerFocused ? ", controller focused" : "")")
     }
 
     private var diagnosticsLog: some View {
@@ -198,11 +208,12 @@ struct ContentView: View {
 
     private var controllerLegend: some View {
         HStack(spacing: 18) {
-            legend("A", "Activate")
+            legend("A", "Activate / enter")
             legend("B", "Back / cancel")
-            legend("D-pad / left stick", "Move")
-            legend("Left / right", "Adjust or change section")
-            legend("View", "Show bridge")
+            legend("D-pad / left stick", "Move spatially")
+            legend("Left / right", "Sidebar ↔ content")
+            legend("LB / RB", "Decrease / increase")
+            legend("View", "Show / hide bridge")
             Spacer()
             if let capture = model.captureAction {
                 Text("Assigning: \(capture.title)")
@@ -246,7 +257,7 @@ struct ContentView: View {
         case .mappings: "Every active Xbox binding. Activate a row to remove it."
         case .commands: "Search, create Jump Bar actions, or map any built-in, MIDI Learn, or live Dorico menu command."
         case .profiles: "Switch, duplicate, reset, import, and export complete controller layouts."
-        case .settings: "Use left/right to adjust the selected value."
+        case .settings: "Move freely with the D-pad; use LB and RB to adjust the focused value."
         case .diagnostics: "Real controller, Dorico, Accessibility, MIDI, routing, and stuck-input state."
         }
     }
