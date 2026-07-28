@@ -4,10 +4,7 @@ import DoricoBridgeCore
 
 @MainActor
 extension AppModel {
-    var activeProfileIdentity: String {
-        "\(activeProfileIndex):\(activeProfile.id.uuidString)"
-    }
-
+    var activeProfileIdentity: String { "\(activeProfileIndex):\(activeProfile.id.uuidString)" }
     var activeProfileName: String { activeProfile.name }
 
     func enforceActiveProfileIsolation() {
@@ -16,35 +13,16 @@ extension AppModel {
         log("Activated exclusive mapping layout: \(activeProfile.name)")
     }
 
-    func mappedAction(
-        for inputs: Set<XboxInput>,
-        pointerMode: Bool,
-        gesture: BindingGesture
-    ) -> CommandAction? {
+    func mappedAction(for inputs: Set<XboxInput>, pointerMode: Bool, gesture: BindingGesture) -> CommandAction? {
         guard !inputs.isEmpty else { return nil }
-        return activeProfile.bindings[
-            BindingKey(inputs: inputs, pointerMode: pointerMode, gesture: gesture)
-        ]
+        return activeProfile.bindings[BindingKey(inputs: inputs, pointerMode: pointerMode, gesture: gesture)]
     }
 
-    func mappedAction(
-        for input: XboxInput,
-        layer: MappingLayer,
-        gesture: BindingGesture
-    ) -> CommandAction? {
-        mappedAction(
-            for: layer.modifierInputs.union([input]),
-            pointerMode: layer == .pointer,
-            gesture: gesture
-        )
+    func mappedAction(for input: XboxInput, layer: MappingLayer, gesture: BindingGesture) -> CommandAction? {
+        mappedAction(for: layer.modifierInputs.union([input]), pointerMode: layer == .pointer, gesture: gesture)
     }
 
-    func assignAction(
-        _ descriptor: ActionDescriptor,
-        to inputs: Set<XboxInput>,
-        pointerMode: Bool,
-        gesture: BindingGesture
-    ) {
+    func assignAction(_ descriptor: ActionDescriptor, to inputs: Set<XboxInput>, pointerMode: Bool, gesture: BindingGesture) {
         guard !inputs.isEmpty else {
             captureMessage = "Choose at least one controller control."
             return
@@ -55,17 +33,13 @@ extension AppModel {
         activeProfile = profile
         selectedLayer = pointerMode ? .pointer : .base
         selectedGesture = gesture
-        let replacementText = replaced == nil ? "Added" : "Replaced"
-        captureMessage = "\(replacementText) \(key.displayName) with \(descriptor.title) in “\(profile.name)” only."
-        log("\(replacementText) exact combination in \(profile.name): \(key.displayName) · \(gesture.displayName) → \(descriptor.title)")
+        let verb = replaced == nil ? "Added" : "Replaced"
+        captureMessage = "\(verb) \(key.displayName) with \(descriptor.title) in “\(profile.name)” only."
+        log("\(verb) exact combination in \(profile.name): \(key.displayName) · \(gesture.displayName) → \(descriptor.title)")
         testHaptic()
     }
 
-    func removeDirectMapping(
-        for inputs: Set<XboxInput>,
-        pointerMode: Bool,
-        gesture: BindingGesture
-    ) {
+    func removeDirectMapping(for inputs: Set<XboxInput>, pointerMode: Bool, gesture: BindingGesture) {
         guard !inputs.isEmpty else { return }
         let key = BindingKey(inputs: inputs, pointerMode: pointerMode, gesture: gesture)
         var profile = activeProfile
@@ -79,14 +53,20 @@ extension AppModel {
     }
 
     func customKeyDescriptor(key: String, modifiers: Set<KeyModifier>) -> ActionDescriptor? {
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !trimmed.isEmpty else { return nil }
-        let chord = KeyChord(trimmed, modifiers: modifiers)
-        return ActionDescriptor(
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty || !modifiers.isEmpty else { return nil }
+        let chord = trimmed.isEmpty ? KeyChord(modifiersOnly: modifiers) : KeyChord(trimmed, modifiers: modifiers)
+        return customCapturedKeyDescriptor(chord)
+    }
+
+    func customCapturedKeyDescriptor(_ chord: KeyChord) -> ActionDescriptor {
+        ActionDescriptor(
             id: "custom.key.\(UUID().uuidString)",
-            title: "Custom shortcut: \(chord.displayName)",
-            category: "Custom action",
-            detail: "Send \(chord.displayName) to Dorico",
+            title: "Keyboard shortcut: \(chord.displayName)",
+            category: "Custom keyboard shortcut",
+            detail: chord.isModifierOnly
+                ? "Press and release the selected modifier keys"
+                : "Replay the exact captured macOS key, symbols, and modifiers",
             action: .keyChord(chord)
         )
     }
@@ -120,28 +100,38 @@ extension AppModel {
     }
 
     func customMIDIDescriptor(channel: Int, note: Int) -> ActionDescriptor {
-        let address = MIDIAddress(channel: UInt8(min(16, max(1, channel))), note: UInt8(min(127, max(0, note))))
+        let address = MIDIAddress(
+            channel: UInt8(min(16, max(1, channel))),
+            note: UInt8(min(127, max(0, note)))
+        )
         return ActionDescriptor(
             id: "custom.midi.\(UUID().uuidString)",
-            title: "Custom MIDI ch \(address.channel), note \(address.note)",
-            category: "Custom action",
-            detail: "Send a MIDI note pulse through Dorico Xbox Bridge",
+            title: "MIDI \(address.noteName) · Channel \(address.channel)",
+            category: "Custom MIDI action",
+            detail: "Send \(address.noteName) on virtual MIDI channel \(address.channel)",
             action: .midiPulse(address)
         )
     }
 
     func customMacroDescriptor(name: String, chords: [KeyChord]) -> ActionDescriptor? {
-        guard !chords.isEmpty else { return nil }
-        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = cleanedName.isEmpty ? "Custom macro" : cleanedName
         let steps = chords.enumerated().map { index, chord in
             CommandStep(.keyChord(chord), delayMilliseconds: index == 0 ? 0 : 70)
         }
+        return customSequenceDescriptor(name: name, steps: steps)
+    }
+
+    func customSequenceDescriptor(name: String, steps: [CommandStep]) -> ActionDescriptor? {
+        guard !steps.isEmpty else { return nil }
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = cleaned.isEmpty ? "Custom action sequence" : cleaned
         return ActionDescriptor(
-            id: "custom.macro.\(UUID().uuidString)",
+            id: "custom.sequence.\(UUID().uuidString)",
             title: title,
-            category: "Custom action",
-            detail: chords.map(\.displayName).joined(separator: " → "),
+            category: "Custom action sequence",
+            detail: steps.enumerated().map { index, step in
+                let wait = step.delayMilliseconds == 0 ? "" : " after \(step.delayMilliseconds) ms"
+                return "\(index + 1). \(step.action.summary)\(wait)"
+            }.joined(separator: " → "),
             action: .sequence(steps)
         )
     }
