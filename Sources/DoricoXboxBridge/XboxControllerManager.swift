@@ -25,6 +25,13 @@ final class XboxControllerManager {
     }
 
     func start() {
+        // macOS 11.3 and later defaults this to false. Without enabling it,
+        // GameController stops forwarding Xbox input as soon as Dorico becomes
+        // the frontmost app, which makes the bridge appear to work only inside
+        // its own dashboard.
+        GCController.shouldMonitorBackgroundEvents = true
+        model?.log("Background Xbox input monitoring enabled")
+
         observers.append(NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect,
             object: nil,
