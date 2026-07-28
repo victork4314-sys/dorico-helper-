@@ -9,6 +9,10 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
+# This guard is intentionally independent of Swift tests. Packaging must stop
+# if any required controller-delivery backup is removed from the native target.
+bash scripts/verify-controller-routing.sh
+
 if [[ "${SKIP_TESTS:-0}" != "1" ]]; then
   swift test
 fi
@@ -51,6 +55,13 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 
 ZIP="dist/Dorico-Xbox-Bridge-macOS-Universal.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+unzip -t "$ZIP"
+
+ZIP_VERIFY="$(mktemp -d)"
+ditto -x -k "$ZIP" "$ZIP_VERIFY"
+codesign --verify --deep --strict --verbose=2 "$ZIP_VERIFY/Dorico Xbox Bridge.app"
+lipo "$ZIP_VERIFY/Dorico Xbox Bridge.app/Contents/MacOS/DoricoXboxBridge" -verify_arch arm64 x86_64
+rm -rf "$ZIP_VERIFY"
 
 DMG_ROOT="dist/dmg-root"
 DMG="dist/Dorico-Xbox-Bridge-macOS-Universal.dmg"
@@ -66,7 +77,40 @@ hdiutil create \
 rm -rf "$DMG_ROOT"
 
 hdiutil verify "$DMG"
+DMG_VERIFY="$(mktemp -d)"
+hdiutil attach -nobrowse -readonly -mountpoint "$DMG_VERIFY" "$DMG" >/dev/null
+codesign --verify --deep --strict --verbose=2 "$DMG_VERIFY/Dorico Xbox Bridge.app"
+lipo "$DMG_VERIFY/Dorico Xbox Bridge.app/Contents/MacOS/DoricoXboxBridge" -verify_arch arm64 x86_64
+hdiutil detach "$DMG_VERIFY" >/dev/null
+rmdir "$DMG_VERIFY"
+
+COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+cat > dist/BUILD-MANIFEST.txt <<EOF
+Dorico Xbox Bridge validated build
+Build number: $BUILD_NUMBER
+Commit: $COMMIT_SHA
+macOS runner: $(sw_vers -productVersion)
+Swift: $(swift --version | head -n 1)
+Architectures: arm64 + x86_64
+Controller transport: GameController callbacks + 60 Hz direct polling backup
+Recovery: background reassertion + app-switch recovery + sleep/wake recovery + reconnect recovery + watchdog
+ZIP: tested, extracted, signature verified, architectures verified
+DMG: verified, mounted, signature verified, architectures verified
+EOF
+
+(
+  cd dist
+  shasum -a 256 \
+    Dorico-Xbox-Bridge-macOS-Universal.zip \
+    Dorico-Xbox-Bridge-macOS-Universal.dmg \
+    > SHA256SUMS.txt
+)
+
+cat dist/BUILD-MANIFEST.txt
+cat dist/SHA256SUMS.txt
 
 echo "Created $APP"
 echo "Created $ZIP"
 echo "Created $DMG"
+echo "Created dist/BUILD-MANIFEST.txt"
+echo "Created dist/SHA256SUMS.txt"
