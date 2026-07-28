@@ -25,7 +25,7 @@ final class CoreTests: XCTestCase {
 
     func testHelperConsumesUnmappedControls() {
         let resolver = BindingResolver()
-        for input in [XboxInput.buttonX, .buttonY, .menu, .leftTrigger, .rightBumper] {
+        for input in [XboxInput.buttonX, .buttonY, .menu, .leftTrigger, .rightTrigger] {
             let action = resolver.resolve(
                 emission: GestureEmission(input: input, gesture: .press, timestamp: 1),
                 heldInputs: [input],
@@ -35,6 +35,41 @@ final class CoreTests: XCTestCase {
             )
             XCTAssertNil(action, "\(input.displayName) leaked through the active helper UI")
         }
+    }
+
+    func testHelperBumpersAdjustWithoutStealingDirectionalMovement() {
+        let resolver = BindingResolver()
+        let profile = DefaultCatalog.legatoStyleProfile
+        XCTAssertEqual(
+            resolver.resolve(
+                emission: GestureEmission(input: .leftBumper, gesture: .press, timestamp: 1),
+                heldInputs: [.leftBumper],
+                pointerMode: false,
+                helperUIActive: true,
+                profile: profile
+            ),
+            .internalCommand(.helperDecrease)
+        )
+        XCTAssertEqual(
+            resolver.resolve(
+                emission: GestureEmission(input: .rightBumper, gesture: .repeatPress, timestamp: 1),
+                heldInputs: [.rightBumper],
+                pointerMode: false,
+                helperUIActive: true,
+                profile: profile
+            ),
+            .internalCommand(.helperIncrease)
+        )
+        XCTAssertEqual(
+            resolver.resolve(
+                emission: GestureEmission(input: .dpadLeft, gesture: .press, timestamp: 1),
+                heldInputs: [],
+                pointerMode: false,
+                helperUIActive: true,
+                profile: profile
+            ),
+            .internalCommand(.helperLeft)
+        )
     }
 
     func testRepeatFallsBackToPressBinding() {
