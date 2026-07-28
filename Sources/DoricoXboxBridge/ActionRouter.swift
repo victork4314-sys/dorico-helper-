@@ -31,6 +31,9 @@ final class ActionRouter {
         switch action {
         case .internalCommand(let command):
             model?.handleInternal(command)
+        case .controllerText(let route):
+            guard let model else { return }
+            DoricoTextRouteCoordinator.shared.begin(route, model: model)
         case .pointer(let operation):
             performPointer(operation)
         case .midiPulse(let address):
@@ -39,6 +42,10 @@ final class ActionRouter {
             guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
             KeyEmitter.send(chord)
         case .typeText(let text):
+            if let routedAction = DoricoTextRouteCoordinator.shared.consumeAction(for: text) {
+                try await executeThrowing(routedAction)
+                return
+            }
             guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
             KeyEmitter.type(text)
         case .menuPath(let path):
