@@ -11,17 +11,28 @@ jobs:
       - uses: actions/checkout@v4
       - name: Swift version
         run: swift --version
-      - name: Test core
-        run: swift test
-      - name: Build native app
-        run: swift build -c release
-      - name: Package executable
+      - name: Test core and compile native target
         run: |
-          mkdir -p artifact
-          cp .build/release/DoricoXboxBridge artifact/
-          cp README.md artifact/
-          ditto -c -k --sequesterRsrc --keepParent artifact DoricoXboxBridge-macOS.zip
-      - uses: actions/upload-artifact@v4
+          set -o pipefail
+          swift test 2>&1 | tee swift-test.log
+      - name: Build Universal 2 app, ZIP, and DMG
+        run: |
+          set -o pipefail
+          SKIP_TESTS=1 BUILD_NUMBER="$GITHUB_RUN_NUMBER" bash scripts/build-app.sh 2>&1 | tee app-package.log
+      - name: Upload compiler and packaging logs
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: DoricoXboxBridge-macOS
-          path: DoricoXboxBridge-macOS.zip
+          name: DoricoXboxBridge-build-logs
+          path: |
+            swift-test.log
+            app-package.log
+          if-no-files-found: ignore
+      - name: Upload native app installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: DoricoXboxBridge-macOS-Universal
+          path: |
+            dist/Dorico-Xbox-Bridge-macOS-Universal.zip
+            dist/Dorico-Xbox-Bridge-macOS-Universal.dmg
+          if-no-files-found: error

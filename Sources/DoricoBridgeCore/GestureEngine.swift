@@ -119,6 +119,9 @@ public struct BindingResolver: Sendable {
                 return .internalCommand(.helperBack)
             case .buttonA where emission.gesture == .press:
                 return .internalCommand(.helperActivate)
+            case .view where emission.gesture == .press,
+                 .guide where emission.gesture == .press:
+                return .internalCommand(.toggleDashboard)
             case .dpadUp where emission.gesture == .press || emission.gesture == .repeatPress,
                  .leftStickUp where emission.gesture == .press || emission.gesture == .repeatPress:
                 return .internalCommand(.helperUp)
@@ -131,8 +134,12 @@ public struct BindingResolver: Sendable {
             case .dpadRight where emission.gesture == .press || emission.gesture == .repeatPress,
                  .leftStickRight where emission.gesture == .press || emission.gesture == .repeatPress:
                 return .internalCommand(.helperRight)
+            case .leftBumper where emission.gesture == .press || emission.gesture == .repeatPress:
+                return .internalCommand(.helperDecrease)
+            case .rightBumper where emission.gesture == .press || emission.gesture == .repeatPress:
+                return .internalCommand(.helperIncrease)
             default:
-                break
+                return nil
             }
         }
 

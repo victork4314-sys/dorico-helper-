@@ -29,31 +29,47 @@ final class XboxControllerManager {
             forName: .GCControllerDidConnect,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            guard let connected = notification.object as? GCController else { return }
-            Task { @MainActor in self?.consider(connected) }
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.reconcileControllers() }
         })
         observers.append(NotificationCenter.default.addObserver(
             forName: .GCControllerDidDisconnect,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            guard let disconnected = notification.object as? GCController else { return }
-            Task { @MainActor in self?.disconnected(disconnected) }
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.reconcileControllers() }
         })
 
-        for candidate in GCController.controllers() { consider(candidate) }
+        reconcileControllers()
         GCController.startWirelessControllerDiscovery(completionHandler: nil)
     }
 
     func updateThresholds() {
         digitalStates.removeAll()
+        model?.resetControllerState()
+    }
+
+    private func reconcileControllers() {
+        let candidates = GCController.controllers().filter { isXbox($0) && $0.extendedGamepad != nil }
+        if let active = controller, candidates.contains(where: { $0 === active }) {
+            model?.controllerStatus = statusText
+            return
+        }
+        if let candidate = candidates.first {
+            consider(candidate)
+        } else if controller != nil {
+            disconnected()
+        }
     }
 
     private func consider(_ candidate: GCController) {
         guard isXbox(candidate), candidate.extendedGamepad != nil else {
             model?.log("Ignored non-Xbox controller: \(candidate.vendorName ?? candidate.productCategory)")
             return
+        }
+        if controller !== candidate {
+            digitalStates.removeAll()
+            model?.resetControllerState()
         }
         controller = candidate
         attach(candidate)
@@ -63,11 +79,11 @@ final class XboxControllerManager {
         haptic(.success)
     }
 
-    private func disconnected(_ candidate: GCController) {
-        guard candidate === controller else { return }
+    private func disconnected() {
         controller = nil
         hapticEngine = nil
         digitalStates.removeAll()
+        model?.resetControllerState()
         model?.controllerStatus = "No Xbox controller connected"
         model?.log("Xbox controller disconnected")
     }

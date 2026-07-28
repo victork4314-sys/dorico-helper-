@@ -35,8 +35,9 @@ final class DoricoAccessibility {
     var isTrusted: Bool { AXIsProcessTrusted() }
 
     func requestPermission() {
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+        // Use the documented option key as a literal so Swift 6 does not treat
+        // the imported mutable CoreFoundation global as unsafe shared state.
+        AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
 
     func scanMenuCommands(detector: DoricoDetector) throws -> [ActionDescriptor] {
@@ -169,7 +170,7 @@ final class DoricoAccessibility {
         let filtered = candidates.filter { candidate in
             guard !CFEqual(candidate.element, current) else { return false }
             let point = candidate.frame.center
-            switch direction {
+            return switch direction {
             case .left: point.x < origin.x - 1
             case .right: point.x > origin.x + 1
             case .up: point.y < origin.y - 1
@@ -251,7 +252,7 @@ final class DoricoAccessibility {
     private func directionalScore(_ point: CGPoint, from origin: CGPoint, direction: FocusDirection) -> CGFloat {
         let dx = abs(point.x - origin.x)
         let dy = abs(point.y - origin.y)
-        switch direction {
+        return switch direction {
         case .left, .right: dx + dy * 0.42
         case .up, .down: dy + dx * 0.42
         }
