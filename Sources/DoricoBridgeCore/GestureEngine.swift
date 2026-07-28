@@ -134,6 +134,10 @@ public struct BindingResolver: Sendable {
             case .dpadRight where emission.gesture == .press || emission.gesture == .repeatPress,
                  .leftStickRight where emission.gesture == .press || emission.gesture == .repeatPress:
                 return .internalCommand(.helperRight)
+            case .leftBumper where emission.gesture == .press || emission.gesture == .repeatPress:
+                return .internalCommand(.helperDecrease)
+            case .rightBumper where emission.gesture == .press || emission.gesture == .repeatPress:
+                return .internalCommand(.helperIncrease)
             default:
                 return nil
             }
