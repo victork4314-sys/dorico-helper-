@@ -48,11 +48,16 @@ public enum DefaultCatalog {
         add("xbox.popover.playing", "Playing technique", "Popovers", "Controller-written playing technique", .controllerText(.playingTechniquesPopover))
         add("xbox.popover.bars", "Bars and barlines", "Popovers", "Controller-written bars and barlines", .controllerText(.barsAndBarlinesPopover))
 
+        add("access.focus.left", "Accessibility focus left", "Universal access", "Move to nearest accessible control on the left", .accessibility(.move(.left)), repeatable: true)
+        add("access.focus.right", "Accessibility focus right", "Universal access", "Move to nearest accessible control on the right", .accessibility(.move(.right)), repeatable: true)
+        add("access.focus.up", "Accessibility focus up", "Universal access", "Move to nearest accessible control above", .accessibility(.move(.up)), repeatable: true)
+        add("access.focus.down", "Accessibility focus down", "Universal access", "Move to nearest accessible control below", .accessibility(.move(.down)), repeatable: true)
         add("access.scan.next", "Next accessible zone", "Legato zones", "Legato RB: next reachable Dorico zone", .accessibility(.scanNext), repeatable: true)
         add("access.scan.previous", "Previous accessible zone", "Legato zones", "Legato LB: previous reachable Dorico zone", .accessibility(.scanPrevious), repeatable: true)
         add("access.press", "Press accessible control", "Universal access", "Press the focused Dorico control", .accessibility(.pressFocused))
         add("access.increment", "Increase accessible value", "Universal access", "Increase focused value", .accessibility(.incrementFocused), repeatable: true)
         add("access.decrement", "Decrease accessible value", "Universal access", "Decrease focused value", .accessibility(.decrementFocused), repeatable: true)
+        add("access.menu", "Show focused control menu", "Universal access", "Open the focused control menu", .accessibility(.showFocusedMenu))
 
         add("pointer.toggle", "Toggle pointer mode", "Pointer", "Legato right-stick click", .pointer(.toggle))
         add("pointer.click", "Pointer click", "Pointer", "Left-click", .pointer(.leftClick))
@@ -83,7 +88,6 @@ public enum DefaultCatalog {
             bindings[key] = action(actionID)
         }
 
-        // Exact Legato physical base layout.
         bind(.base, .buttonA, "activate")
         bind(.base, .buttonB, "cancel")
         bind(.base, .buttonX, "xbox.popover.ornaments")
@@ -96,19 +100,16 @@ public enum DefaultCatalog {
         bind(.base, .rightThumbstickButton, "pointer.toggle")
         bind(.base, .guide, "bridge.toggle")
 
-        // D-pad and left stick are intentionally identical everywhere.
         for input in [XboxInput.dpadLeft, .leftStickLeft] { bind(.base, input, "navigate.left") }
         for input in [XboxInput.dpadRight, .leftStickRight] { bind(.base, input, "navigate.right") }
         for input in [XboxInput.dpadUp, .leftStickUp] { bind(.base, input, "navigate.up") }
         for input in [XboxInput.dpadDown, .leftStickDown] { bind(.base, input, "navigate.down") }
 
-        // Right stick scrolls normally, as in Legato.
         bind(.base, .rightStickUp, "pointer.scroll.up")
         bind(.base, .rightStickDown, "pointer.scroll.down")
         bind(.base, .rightStickLeft, "pointer.scroll.left")
         bind(.base, .rightStickRight, "pointer.scroll.right")
 
-        // LT selection modifier: one action per combination, no fallthrough.
         bind(.leftTrigger, .buttonA, "copy")
         bind(.leftTrigger, .buttonB, "cut")
         bind(.leftTrigger, .buttonX, "paste")
@@ -118,7 +119,6 @@ public enum DefaultCatalog {
         for input in [XboxInput.dpadUp, .leftStickUp] { bind(.leftTrigger, input, "select.up") }
         for input in [XboxInput.dpadDown, .leftStickDown] { bind(.leftTrigger, input, "select.down") }
 
-        // RT duration wheel equivalents, retaining the same held-trigger concept.
         bind(.rightTrigger, .buttonB, "duration.16")
         bind(.rightTrigger, .buttonX, "duration.8")
         bind(.rightTrigger, .buttonA, "duration.4")
@@ -130,10 +130,8 @@ public enum DefaultCatalog {
         bind(.rightTrigger, .dpadLeft, "tie")
         bind(.rightTrigger, .leftStickLeft, "tie")
 
-        // LB + RB is a distinct combo and the gesture engine suppresses the two singles.
         bind(.bothBumpers, .rightBumper, "bridge.dashboard")
 
-        // Pointer mode: both sticks can move the pointer, matching Legato's free pointer control.
         for input in [XboxInput.leftStickLeft, .rightStickLeft] { bindings[BindingKey(layer: .pointer, input: input)] = .pointer(.move(dx: -18, dy: 0)) }
         for input in [XboxInput.leftStickRight, .rightStickRight] { bindings[BindingKey(layer: .pointer, input: input)] = .pointer(.move(dx: 18, dy: 0)) }
         for input in [XboxInput.leftStickUp, .rightStickUp] { bindings[BindingKey(layer: .pointer, input: input)] = .pointer(.move(dx: 0, dy: 18)) }
