@@ -1,14 +1,18 @@
 #if os(macOS)
 import AppKit
 import Foundation
+import DoricoBridgeCore
 
 @MainActor
 final class DoricoDetector {
     func runningApplication() -> NSRunningApplication? {
-        NSWorkspace.shared.runningApplications.first { application in
-            let name = application.localizedName?.lowercased() ?? ""
-            let bundle = application.bundleIdentifier?.lowercased() ?? ""
-            return name.contains("dorico") || bundle.contains("steinberg.dorico")
+        let ownProcessIdentifier = ProcessInfo.processInfo.processIdentifier
+        return NSWorkspace.shared.runningApplications.first { application in
+            guard application.processIdentifier != ownProcessIdentifier else { return false }
+            return DoricoApplicationIdentity.matches(
+                localizedName: application.localizedName,
+                bundleIdentifier: application.bundleIdentifier
+            )
         }
     }
 
