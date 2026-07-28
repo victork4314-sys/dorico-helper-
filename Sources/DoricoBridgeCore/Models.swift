@@ -144,9 +144,8 @@ public struct BindingKey: Hashable, Codable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let gesture = try container.decodeIfPresent(BindingGesture.self, forKey: .gesture) ?? .press
         if let decodedInputs = try container.decodeIfPresent(Set<XboxInput>.self, forKey: .inputs), !decodedInputs.isEmpty {
-            inputs = decodedInputs
-            pointerMode = try container.decodeIfPresent(Bool.self, forKey: .pointerMode) ?? false
-            self.gesture = gesture
+            let decodedPointerMode = try container.decodeIfPresent(Bool.self, forKey: .pointerMode) ?? false
+            self.init(inputs: decodedInputs, pointerMode: decodedPointerMode, gesture: gesture)
             return
         }
         let oldLayer = try container.decodeIfPresent(MappingLayer.self, forKey: .layer) ?? .base
