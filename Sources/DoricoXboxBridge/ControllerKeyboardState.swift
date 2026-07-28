@@ -22,7 +22,7 @@ final class ControllerKeyboardState: ObservableObject {
         var prompt: String {
             switch self {
             case .searchCommands: "Enter text used to filter the complete command list."
-            case .typeIntoDorico: "Enter text for the currently open Dorico field or popover."
+            case .typeIntoDorico: "Enter text for the selected Dorico route, focused field, or open popover."
             case .runJumpBar: "Enter a Dorico Jump Bar command. The bridge opens Commands mode and runs it."
             case .mapJumpBar: "Enter a Jump Bar command, then choose the Xbox input that should run it."
             }
@@ -40,16 +40,16 @@ final class ControllerKeyboardState: ObservableObject {
     private let pages: [[String]] = [
         Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init) +
             Array("0123456789").map(String.init) +
-            ["#", "♭", "♯", "+", "-", ".", ",", "/", "(", ")", "[", "]", "<", ">", "=", ":", ";", "'", "\"", "_"],
+            ["SPACE", "#", "♭", "♯", "+", "-", ".", ",", "/", "(", ")", "[", "]", "<", ">", "=", ":", ";", "'", "\"", "_"],
         Array("abcdefghijklmnopqrstuvwxyz").map(String.init) +
             Array("0123456789").map(String.init) +
-            ["#", "b", "+", "-", ".", ",", "/", "(", ")", "[", "]", "<", ">", "=", ":", ";", "'", "\"", "_", "@"],
+            ["SPACE", "#", "b", "+", "-", ".", ",", "/", "(", ")", "[", "]", "<", ">", "=", ":", ";", "'", "\"", "_", "@"],
         [
-            "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-            "#", "♭", "♯", "𝄪", "𝄫", "+", "-", "×", "÷", "=",
-            ".", ",", ":", ";", "!", "?", "'", "\"", "_", "@",
-            "(", ")", "[", "]", "{", "}", "<", ">", "/", "\\",
-            "%", "&", "*", "^", "~", "|", "°", "→", "←", "·"
+            "SPACE", "0", "1", "2", "3", "4", "5", "6", "7", "8",
+            "9", "#", "♭", "♯", "𝄪", "𝄫", "+", "-", "×", "÷",
+            "=", ".", ",", ":", ";", "!", "?", "'", "\"", "_",
+            "@", "(", ")", "[", "]", "{", "}", "<", ">", "/",
+            "\\", "%", "&", "*", "^", "~", "|", "°", "→", "←", "·"
         ]
     ]
 
@@ -69,6 +69,7 @@ final class ControllerKeyboardState: ObservableObject {
     }
 
     func open(_ purpose: Purpose, initialText: String = "") {
+        DoricoTextRouteCoordinator.shared.keyboardWillOpen(purpose)
         self.purpose = purpose
         text = initialText
         selectedIndex = 0
@@ -97,21 +98,25 @@ final class ControllerKeyboardState: ObservableObject {
     }
 
     func insertSelectedKey() {
-        text.append(selectedKey)
+        if selectedKey == "SPACE" {
+            text.append(" ")
+        } else {
+            text.append(selectedKey)
+        }
     }
 
+    // AppModel already routes X through this method. X is erase, while space is
+    // a selectable keyboard key so B can remain an unconditional cancel command.
     func insertSpace() {
-        text.append(" ")
+        guard !text.isEmpty else { return }
+        text.removeLast()
     }
 
     @discardableResult
     func deleteOrClose() -> Bool {
-        if text.isEmpty {
-            close()
-            return true
-        }
-        text.removeLast()
-        return false
+        DoricoTextRouteCoordinator.shared.cancel()
+        close()
+        return true
     }
 
     func nextPage() {
