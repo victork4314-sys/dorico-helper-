@@ -7,7 +7,7 @@ final class LegatoParityAndCollisionTests: XCTestCase {
 
     func testExactLegatoPhysicalBaseLayout() {
         let expected: [(XboxInput, CommandAction)] = [
-            (.buttonA, DefaultCatalog.action("activate")),
+            (.buttonA, DefaultCatalog.action("place.note")),
             (.buttonB, DefaultCatalog.action("cancel")),
             (.buttonX, DefaultCatalog.action("xbox.popover.ornaments")),
             (.buttonY, DefaultCatalog.action("bridge.dashboard")),
@@ -37,6 +37,13 @@ final class LegatoParityAndCollisionTests: XCTestCase {
                 )
             }
         }
+    }
+
+    func testBaseUpDownUseDynamicPitchMovement() {
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .dpadUp)), DefaultCatalog.action("pitch.up"))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .dpadDown)), DefaultCatalog.action("pitch.down"))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .leftStickUp)), DefaultCatalog.action("pitch.up"))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .leftStickDown)), DefaultCatalog.action("pitch.down"))
     }
 
     func testEveryPhysicalSlotHasOnlyOneAction() {
