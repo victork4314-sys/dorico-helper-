@@ -4,6 +4,7 @@ import DoricoBridgeCore
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
+    @State private var mappingTarget: ControllerMappingTarget?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -22,6 +23,13 @@ struct ContentView: View {
             if model.controllerKeyboard.isVisible {
                 ControllerKeyboardView(keyboard: model.controllerKeyboard)
             }
+        }
+        .sheet(item: $mappingTarget) { target in
+            MappingActionPickerView(model: model, input: target.input)
+        }
+        .onChange(of: model.activeProfileIdentity) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            model.enforceActiveProfileIsolation()
         }
     }
 
@@ -67,6 +75,7 @@ struct ContentView: View {
                 Label(model.controllerStatus, systemImage: "gamecontroller")
                 Label(model.doricoStatus, systemImage: "music.note.list")
                 Label(model.bridgeEnabled ? "Bridge enabled" : "Bridge disabled", systemImage: model.bridgeEnabled ? "checkmark.circle" : "pause.circle")
+                Label(model.activeProfileName, systemImage: "rectangle.stack.fill")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -110,10 +119,11 @@ struct ContentView: View {
                 .background(Color.accentColor.opacity(0.14))
                 .clipShape(Capsule())
             }
-            if model.selectedSection == .settings || model.selectedSection == .commands {
+            if model.selectedSection == .mappings || model.selectedSection == .settings || model.selectedSection == .commands {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(model.selectedLayer.displayName)
-                    Text(model.selectedGesture.displayName)
+                    Text(model.activeProfileName)
+                        .fontWeight(.semibold)
+                    Text("\(model.selectedLayer.displayName) · \(model.selectedGesture.displayName)")
                         .foregroundStyle(.secondary)
                 }
                 .font(.caption)
@@ -126,6 +136,14 @@ struct ContentView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 8) {
+                    if model.selectedSection == .mappings {
+                        ControllerDiagramView(model: model) { input in
+                            mappingTarget = ControllerMappingTarget(input: input)
+                        }
+                        .id("controller.diagram")
+                        .padding(.bottom, 10)
+                    }
+
                     if model.uiItems.isEmpty {
                         ContentUnavailableView(
                             "Nothing here yet",
@@ -208,12 +226,11 @@ struct ContentView: View {
 
     private var controllerLegend: some View {
         HStack(spacing: 18) {
-            legend("A", "Activate / enter")
+            legend("A", "Place selected note")
             legend("B", "Back / cancel")
-            legend("D-pad / left stick", "Move spatially")
-            legend("Left / right", "Sidebar ↔ content")
-            legend("LB / RB", "Decrease / increase")
-            legend("View", "Show / hide bridge")
+            legend("D-pad / left stick", "Move pitch / position")
+            legend("LB / RB", "Previous / next zone")
+            legend("Right stick", "Scroll / pointer")
             Spacer()
             if let capture = model.captureAction {
                 Text("Assigning: \(capture.title)")
@@ -254,9 +271,9 @@ struct ContentView: View {
     private var sectionSubtitle: String {
         switch model.selectedSection {
         case .status: "Connection, permissions, Dorico detection, controller text, and universal fallbacks"
-        case .mappings: "Every active Xbox binding. Activate a row to remove it."
-        case .commands: "Search, create Jump Bar actions, or map any built-in, MIDI Learn, or live Dorico menu command."
-        case .profiles: "Switch, duplicate, reset, import, and export complete controller layouts."
+        case .mappings: "Only the selected layout applies. Click any controller control to choose a simple, searched, or custom action."
+        case .commands: "Search, scan, create Jump Bar actions, or map any built-in and live Dorico command."
+        case .profiles: "Choose one exclusive mapping layout; other layouts remain saved but inactive."
         case .settings: "Move freely with the D-pad; use LB and RB to adjust the focused value."
         case .diagnostics: "Real controller, Dorico, Accessibility, MIDI, routing, and stuck-input state."
         }
@@ -264,7 +281,7 @@ struct ContentView: View {
 
     private var emptyStateText: String {
         switch model.selectedSection {
-        case .mappings: "Choose a command and capture an Xbox input to create a mapping."
+        case .mappings: "Click a control in the controller diagram or use Add Mapping."
         case .commands: "Clear the controller-entered search or scan Dorico menus."
         default: "No items are available."
         }
