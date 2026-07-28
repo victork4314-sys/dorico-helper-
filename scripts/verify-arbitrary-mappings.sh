@@ -22,7 +22,7 @@ require "$models" "public var inputs: Set<XboxInput>" "binding keys are not exac
 require "$models" "public var virtualKeyCode: UInt16?" "physical keyboard key-code capture is missing"
 require "$models" "case command, shift, option, control, function, capsLock" "complete keyboard modifiers are missing"
 require "$models" "public static func noteName" "named MIDI pitches are missing"
-require "$engine" "Exact set matching only" "resolver subset fallthrough protection is missing"
+require "$engine" "for: emission.inputs" "resolver is not looking up the emitted exact input set"
 require "$engine" "suppressUntilAllReleased" "partial release can leak smaller combinations"
 require "$app_model" "capturePeakInputs" "physical arbitrary-combination capture is missing"
 require "$recorder" "override func flagsChanged" "modifier-only keyboard capture is missing"
