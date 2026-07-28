@@ -85,6 +85,22 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(decoded.bindings.count, DefaultCatalog.legatoStyleProfile.bindings.count)
     }
 
+    func testControllerTextActionRoundTrip() throws {
+        let original = CommandAction.controllerText(.jumpBarCommands)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(CommandAction.self, from: data)
+        XCTAssertEqual(decoded, original)
+    }
+
+    func testDefaultProfileUsesXboxKeyboardForPopoversAndJumpBar() {
+        let profile = DefaultCatalog.legatoStyleProfile
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .bothTriggers, input: .buttonA)), .controllerText(.dynamicsPopover))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .bothTriggers, input: .dpadUp)), .controllerText(.tempoPopover))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .leftBumper, input: .buttonX)), .controllerText(.jumpBarCommands))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .leftBumper, input: .buttonY)), .controllerText(.jumpBarGoTo))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .leftBumper, input: .buttonA)), .controllerText(.focusedField))
+    }
+
     func testUniversalFallbackCatalogIsComplete() {
         let requiredIDs = [
             "access.focus.left", "access.focus.right", "access.focus.up", "access.focus.down",
