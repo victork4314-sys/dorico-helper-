@@ -13,7 +13,7 @@ This is not a generic controller-to-keyboard mapper. It combines Xbox-native inp
 - 512 virtual MIDI Learn slots across four MIDI channels, with room to expand to the full 2,048 channel/note address space.
 - Live accessible Dorico menu scanning so commands are not limited to a hard-coded list.
 - Spatial Accessibility focus that chooses the nearest control in the requested direction across the focused Dorico window.
-- JSON profile persistence, import, and export.
+- JSON profile persistence, controller-safe import, and controller-safe export without native file-picker traps.
 - Unit tests for layer precedence, B/back behavior, repeat fallback, double-press handling, profile persistence, and MIDI addressing.
 - Native macOS CI testing, Universal 2 release building, app-bundle signing verification, ZIP packaging, and DMG packaging on every push.
 
@@ -29,6 +29,15 @@ The app contains both Apple Silicon (`arm64`) and Intel (`x86_64`) code. The cur
 ## Dorico MIDI Learn
 
 Dorico Pro 6.1 allows MIDI keys or buttons to be assigned to functions and menu items in **Preferences → Key Commands → MIDI Learn**. The bridge creates a virtual MIDI source called **Dorico Xbox Bridge**. Select a MIDI Learn slot in the bridge, map it to an Xbox input, then use that input while Dorico's MIDI Learn control is listening.
+
+## Controller-safe profile exchange
+
+The dashboard never opens a save/open panel that can steal the controller.
+
+- **Export profiles** writes `Dorico-Xbox-Profiles.json` to `Documents/Dorico Xbox Bridge Profiles`.
+- **Import profiles** loads the newest JSON file in that same folder.
+
+This keeps profile exchange usable from the Xbox-controlled dashboard and avoids requiring a physical mouse or keyboard inside a native file dialog.
 
 ## Build
 
