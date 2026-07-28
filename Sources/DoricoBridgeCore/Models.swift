@@ -164,6 +164,36 @@ public enum PointerOperation: Codable, Hashable, Sendable {
     case toggle
 }
 
+public enum DoricoTextRoute: String, Codable, CaseIterable, Hashable, Sendable {
+    case focusedField
+    case jumpBarCommands
+    case jumpBarGoTo
+    case dynamicsPopover
+    case ornamentsPopover
+    case meterPopover
+    case keySignaturePopover
+    case tempoPopover
+    case clefPopover
+    case playingTechniquesPopover
+    case barsAndBarlinesPopover
+
+    public var displayName: String {
+        switch self {
+        case .focusedField: "Focused Dorico field or open popover"
+        case .jumpBarCommands: "Jump Bar Commands"
+        case .jumpBarGoTo: "Jump Bar Go To"
+        case .dynamicsPopover: "Dynamics popover"
+        case .ornamentsPopover: "Ornaments popover"
+        case .meterPopover: "Time signature popover"
+        case .keySignaturePopover: "Key signature popover"
+        case .tempoPopover: "Tempo popover"
+        case .clefPopover: "Clef popover"
+        case .playingTechniquesPopover: "Playing techniques popover"
+        case .barsAndBarlinesPopover: "Bars and barlines popover"
+        }
+    }
+}
+
 public enum BridgeInternalCommand: String, Codable, Hashable, Sendable {
     case showDashboard
     case hideDashboard
@@ -193,6 +223,7 @@ public struct CommandStep: Codable, Hashable, Sendable {
 public indirect enum CommandAction: Codable, Hashable, Sendable {
     case keyChord(KeyChord)
     case typeText(String)
+    case controllerText(DoricoTextRoute)
     case midiPulse(MIDIAddress)
     case menuPath([String])
     case accessibility(AccessibilityOperation)
@@ -205,10 +236,11 @@ public indirect enum CommandAction: Codable, Hashable, Sendable {
         switch self {
         case .keyChord(let chord): chord.displayName
         case .typeText(let text): "Type “\(text)”"
+        case .controllerText(let route): "Xbox keyboard: \(route.displayName)"
         case .midiPulse(let address): "MIDI ch \(address.channel), note \(address.note)"
         case .menuPath(let path): path.joined(separator: " › ")
-        case .accessibility(let op): "Accessibility: \(String(describing: op))"
-        case .pointer(let op): "Pointer: \(String(describing: op))"
+        case .accessibility(let operation): "Accessibility: \(String(describing: operation))"
+        case .pointer(let operation): "Pointer: \(String(describing: operation))"
         case .sequence(let steps): "Macro (\(steps.count) steps)"
         case .internalCommand(let command): "Bridge: \(command.rawValue)"
         case .none: "None"
