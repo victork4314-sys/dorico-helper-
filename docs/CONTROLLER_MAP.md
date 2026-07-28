@@ -43,10 +43,33 @@ This document is generated from the built-in `Dorico Pro — Legato style` profi
 - D-pad Left: playing techniques popover.
 - D-pad Right: bars and barlines popover.
 
+## Hold LB + RB
+
+- A: toggle pointer mode.
+- B: press the focused accessible Dorico control.
+- X: decrement the focused accessible value.
+- Y: increment the focused accessible value.
+- D-pad Left/Right: scan previous/next accessible control.
+- D-pad Up/Down: spatial accessible focus up/down.
+- Menu: show the focused control menu.
+
 ## Pointer mode
 
-- Left stick: move pointer.
-- Right stick up/down: scroll.
+- Left stick: move pointer in all directions.
+- Right stick: scroll vertically and horizontally.
 - A: left-click.
+- Y: double-click.
 - X: right-click.
 - B: leave pointer mode.
+
+## Xbox controller keyboard
+
+- D-pad or left stick: move through the 2D character grid.
+- A: type the selected character.
+- B: delete one character; close the keyboard when the text is empty.
+- X: insert a space.
+- Y, LB, or RB: change character page.
+- Menu or right stick click: submit.
+- View: cancel.
+
+The keyboard is available for command search, arbitrary Dorico text and popovers, immediate Jump Bar commands, and reusable Jump Bar controller mappings.
