@@ -40,7 +40,6 @@ final class AppModel: ObservableObject {
     @Published var bridgeEnabled = true
     @Published var dashboardVisible = true
     @Published var selectedSection: Section = .status
-    // -1 is the visible sidebar. Non-negative values are rows in the content column.
     @Published var selectedRow = 0
     @Published var controllerStatus = "No Xbox controller connected"
     @Published var doricoStatus = "Dorico Pro is not running"
@@ -74,6 +73,8 @@ final class AppModel: ObservableObject {
     private var tickTimer: Timer?
     private var statusTimer: Timer?
     private var started = false
+    private var mappingAddMode = false
+    private var rebindSourceKey: BindingKey?
 
     var activeProfile: ControllerProfile {
         get {
@@ -131,43 +132,28 @@ final class AppModel: ObservableObject {
         if event.isPressed { heldInputs.insert(event.input) } else { heldInputs.remove(event.input) }
 
         if controllerKeyboard.isVisible {
-            for emission in keyboardGestureEngine.ingest(event, profile: activeProfile) {
-                handleKeyboardEmission(emission)
-            }
+            for emission in keyboardGestureEngine.ingest(event, profile: activeProfile) { handleKeyboardEmission(emission) }
             return
         }
 
         if let captureAction, event.isPressed {
-            if event.input == .buttonB {
-                self.captureAction = nil
-                captureMessage = "Mapping cancelled"
-                controller.haptic(.cancel)
+            if event.input == .buttonB && heldInputs.subtracting([.buttonB]).isEmpty {
+                cancelMappingCapture()
                 return
             }
-            var profile = activeProfile
-            profile.bindings[BindingKey(layer: selectedLayer, input: event.input, gesture: selectedGesture)] = captureAction.action
-            activeProfile = profile
-            captureMessage = "\(event.input.displayName) now performs \(captureAction.title) in \(selectedLayer.displayName)"
-            self.captureAction = nil
-            controller.haptic(.success)
+            capture(action: captureAction, input: event.input)
             return
         }
 
-        for emission in gestureEngine.ingest(event, profile: activeProfile) {
-            dispatch(emission)
-        }
+        for emission in gestureEngine.ingest(event, profile: activeProfile) { dispatch(emission) }
     }
 
     private func tick() {
         if controllerKeyboard.isVisible {
-            for emission in keyboardGestureEngine.tick(at: ProcessInfo.processInfo.systemUptime, profile: activeProfile) {
-                handleKeyboardEmission(emission)
-            }
+            for emission in keyboardGestureEngine.tick(at: ProcessInfo.processInfo.systemUptime, profile: activeProfile) { handleKeyboardEmission(emission) }
             return
         }
-        for emission in gestureEngine.tick(at: ProcessInfo.processInfo.systemUptime, profile: activeProfile) {
-            dispatch(emission)
-        }
+        for emission in gestureEngine.tick(at: ProcessInfo.processInfo.systemUptime, profile: activeProfile) { dispatch(emission) }
     }
 
     private func dispatch(_ emission: GestureEmission) {
@@ -180,7 +166,6 @@ final class AppModel: ObservableObject {
             helperUIActive: helperActive,
             profile: activeProfile
         ) else { return }
-
         lastAction = action.summary
         Task { await router.execute(action) }
     }
@@ -223,9 +208,7 @@ final class AppModel: ObservableObject {
         NSApp.hide(nil)
     }
 
-    func toggleDashboard() {
-        dashboardVisible ? hideDashboard() : showDashboard()
-    }
+    func toggleDashboard() { dashboardVisible ? hideDashboard() : showDashboard() }
 
     func selectSection(_ section: Section) {
         selectedSection = section
@@ -285,8 +268,13 @@ final class AppModel: ObservableObject {
             return
         }
         if captureAction != nil {
-            captureAction = nil
-            captureMessage = "Mapping cancelled"
+            cancelMappingCapture()
+            return
+        }
+        if mappingAddMode {
+            mappingAddMode = false
+            selectSection(.mappings)
+            captureMessage = "Add Mapping cancelled"
             return
         }
         if selectedSection != .status {
@@ -299,14 +287,72 @@ final class AppModel: ObservableObject {
 
     func beginCapture(_ action: ActionDescriptor) {
         captureAction = action
-        captureMessage = "Press the Xbox control to assign. B cancels."
-        log("Capturing input for \(action.title)")
+        rebindSourceKey = nil
+        captureMessage = "Press the controller input or held-button combination for \(action.title). B alone cancels."
+        log("Capturing new input for \(action.title)")
+    }
+
+    private func beginRebind(_ key: BindingKey, action: CommandAction) {
+        captureAction = ActionDescriptor(
+            id: "rebind.\(key.layer.rawValue).\(key.input.rawValue).\(key.gesture.rawValue)",
+            title: action.summary,
+            category: "Existing mapping",
+            detail: "Replace \(key.layer.displayName) · \(key.input.displayName)",
+            action: action
+        )
+        rebindSourceKey = key
+        captureMessage = "Press the replacement controller input or combination. The old mapping stays until the new one is accepted. B alone cancels."
+        log("Rebinding \(key.input.displayName) in \(key.layer.displayName)")
+    }
+
+    private func capture(action: ActionDescriptor, input: XboxInput) {
+        let layer = resolver.activeLayer(heldInputs: heldInputs.subtracting([input]), pointerMode: pointerMode)
+        let target = BindingKey(layer: layer, input: input, gesture: selectedGesture)
+        var profile = activeProfile
+
+        if let occupied = profile.bindings[target], target != rebindSourceKey {
+            captureMessage = "That input already performs \(occupied.summary) in \(layer.displayName). Choose another input or delete/rebind the existing mapping first."
+            controller.haptic(.cancel)
+            log("Rejected mapping collision at \(layer.displayName) · \(input.displayName)")
+            return
+        }
+
+        if let old = rebindSourceKey { profile.bindings.removeValue(forKey: old) }
+        profile.bindings[target] = action.action
+        activeProfile = profile
+        captureMessage = "\(layer.displayName) · \(input.displayName) now performs \(action.title)"
+        captureAction = nil
+        rebindSourceKey = nil
+        mappingAddMode = false
+        selectedSection = .mappings
+        selectedRow = 0
+        controller.haptic(.success)
+        log("Saved collision-free mapping: \(layer.displayName) · \(input.displayName) → \(action.title)")
+    }
+
+    private func cancelMappingCapture() {
+        captureAction = nil
+        rebindSourceKey = nil
+        mappingAddMode = false
+        captureMessage = "Mapping cancelled; no bindings changed"
+        controller.haptic(.cancel)
+    }
+
+    private func startAddMapping() {
+        mappingAddMode = true
+        captureAction = nil
+        rebindSourceKey = nil
+        selectedSection = .commands
+        selectedRow = 0
+        captureMessage = "Choose what the new mapping should do. Then press A, followed by the controller input or combination."
     }
 
     func clearBinding(_ key: BindingKey) {
         var profile = activeProfile
         profile.bindings.removeValue(forKey: key)
         activeProfile = profile
+        captureMessage = "Deleted only \(key.layer.displayName) · \(key.input.displayName) · \(key.gesture.displayName)"
+        log("Explicitly deleted mapping \(key.layer.displayName) · \(key.input.displayName)")
     }
 
     func scanDoricoMenus() {
@@ -319,10 +365,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func requestAccessibility() {
-        accessibility.requestPermission()
-        refreshStatus()
-    }
+    func requestAccessibility() { accessibility.requestPermission(); refreshStatus() }
 
     func refreshStatus() {
         controllerStatus = controller.statusText
@@ -347,10 +390,7 @@ final class AppModel: ObservableObject {
         persistProfiles()
     }
 
-    func resetActiveProfile() {
-        activeProfile = DefaultCatalog.legatoStyleProfile
-    }
-
+    func resetActiveProfile() { activeProfile = DefaultCatalog.legatoStyleProfile }
     func exportProfiles() { store.exportProfiles(profiles) }
     func importProfiles() {
         if let imported = store.importProfiles(), !imported.isEmpty {
@@ -360,11 +400,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func testMIDI() {
-        midi.sendPulse(MIDIAddress(channel: 1, note: 60))
-        log("Sent MIDI test: channel 1, note 60")
-    }
-
+    func testMIDI() { midi.sendPulse(MIDIAddress(channel: 1, note: 60)); log("Sent MIDI test: channel 1, note 60") }
     func testHaptic() { controller.haptic(.success) }
 
     func resetControllerState() {
@@ -373,6 +409,8 @@ final class AppModel: ObservableObject {
         keyboardGestureEngine.reset()
         pointerMode = false
         captureAction = nil
+        rebindSourceKey = nil
+        mappingAddMode = false
         controllerKeyboard.close()
         captureMessage = "Xbox controller state reset after disconnect"
         log("Controller state reset")
@@ -396,52 +434,30 @@ final class AppModel: ObservableObject {
         let repeatable = emission.gesture == .press || emission.gesture == .repeatPress
         if repeatable {
             switch emission.input {
-            case .dpadLeft, .leftStickLeft:
-                controllerKeyboard.move(horizontal: -1, vertical: 0)
-                controller.haptic(.tick)
-                return
-            case .dpadRight, .leftStickRight:
-                controllerKeyboard.move(horizontal: 1, vertical: 0)
-                controller.haptic(.tick)
-                return
-            case .dpadUp, .leftStickUp:
-                controllerKeyboard.move(horizontal: 0, vertical: -1)
-                controller.haptic(.tick)
-                return
-            case .dpadDown, .leftStickDown:
-                controllerKeyboard.move(horizontal: 0, vertical: 1)
-                controller.haptic(.tick)
-                return
-            default:
-                break
+            case .dpadLeft, .leftStickLeft: controllerKeyboard.move(horizontal: -1, vertical: 0); controller.haptic(.tick); return
+            case .dpadRight, .leftStickRight: controllerKeyboard.move(horizontal: 1, vertical: 0); controller.haptic(.tick); return
+            case .dpadUp, .leftStickUp: controllerKeyboard.move(horizontal: 0, vertical: -1); controller.haptic(.tick); return
+            case .dpadDown, .leftStickDown: controllerKeyboard.move(horizontal: 0, vertical: 1); controller.haptic(.tick); return
+            default: break
             }
         }
-
         guard emission.gesture == .press else { return }
         switch emission.input {
-        case .buttonA:
-            controllerKeyboard.insertSelectedKey()
-            controller.haptic(.soft)
+        case .buttonA: controllerKeyboard.insertSelectedKey(); controller.haptic(.soft)
         case .buttonB:
             let closed = controllerKeyboard.deleteOrClose()
             controller.haptic(closed ? .cancel : .tick)
             if closed { captureMessage = "Xbox keyboard closed" }
-        case .buttonX:
-            controllerKeyboard.insertSpace()
-            controller.haptic(.tick)
-        case .buttonY, .leftBumper, .rightBumper:
-            controllerKeyboard.nextPage()
-            controller.haptic(.soft)
-        case .menu, .rightThumbstickButton:
-            submitControllerKeyboard()
+        case .buttonX: controllerKeyboard.insertSpace(); controller.haptic(.tick)
+        case .buttonY, .leftBumper, .rightBumper: controllerKeyboard.nextPage(); controller.haptic(.soft)
+        case .menu, .rightThumbstickButton: submitControllerKeyboard()
         case .view:
             DoricoTextRouteCoordinator.shared.cancel()
             controllerKeyboard.close()
             keyboardGestureEngine.reset()
             captureMessage = "Xbox keyboard cancelled"
             controller.haptic(.cancel)
-        default:
-            break
+        default: break
         }
     }
 
@@ -451,38 +467,26 @@ final class AppModel: ObservableObject {
         controllerKeyboard.close()
         keyboardGestureEngine.reset()
         heldInputs.removeAll()
-
         switch purpose {
         case .searchCommands:
             commandFilter = text
             selectSection(.commands)
             captureMessage = text.isEmpty ? "Command search cleared" : "Showing commands matching “\(text)”"
         case .typeIntoDorico:
-            guard !text.isEmpty else {
-                DoricoTextRouteCoordinator.shared.cancel()
-                captureMessage = "Nothing was entered"
-                return
-            }
+            guard !text.isEmpty else { DoricoTextRouteCoordinator.shared.cancel(); captureMessage = "Nothing was entered"; return }
             executeInDorico(.typeText(text), label: "Typed controller text into Dorico")
         case .runJumpBar:
-            guard !text.isEmpty else {
-                captureMessage = "Enter a Jump Bar command first"
-                return
-            }
+            guard !text.isEmpty else { captureMessage = "Enter a Jump Bar command first"; return }
             executeInDorico(jumpBarAction(text), label: "Ran Jump Bar command: \(text)")
         case .mapJumpBar:
-            guard !text.isEmpty else {
-                captureMessage = "Enter a Jump Bar command first"
-                return
-            }
-            let descriptor = ActionDescriptor(
+            guard !text.isEmpty else { captureMessage = "Enter a Jump Bar command first"; return }
+            beginCapture(ActionDescriptor(
                 id: "jumpbar.custom.\(UUID().uuidString)",
                 title: "Jump Bar: \(text)",
                 category: "Custom Jump Bar",
                 detail: "Open Dorico Jump Bar Commands mode and run “\(text)”",
                 action: jumpBarAction(text)
-            )
-            beginCapture(descriptor)
+            ))
         }
     }
 
@@ -514,18 +518,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func persistProfiles() {
-        store.saveProfiles(profiles)
-        store.saveActiveIndex(activeProfileIndex)
-    }
+    private func persistProfiles() { store.saveProfiles(profiles); store.saveActiveIndex(activeProfileIndex) }
 
     private var currentContextDescription: String {
-        if controllerKeyboard.isVisible {
-            return "\(controllerKeyboard.purpose.title), \(controllerKeyboard.text), selected \(controllerKeyboard.selectedKey), page \(controllerKeyboard.pageName)"
-        }
-        if selectedRow < 0 {
-            return "Sidebar, \(selectedSection.rawValue) section. \(controllerStatus). \(doricoStatus)."
-        }
+        if controllerKeyboard.isVisible { return "\(controllerKeyboard.purpose.title), \(controllerKeyboard.text), selected \(controllerKeyboard.selectedKey), page \(controllerKeyboard.pageName)" }
+        if selectedRow < 0 { return "Sidebar, \(selectedSection.rawValue) section. \(controllerStatus). \(doricoStatus)." }
         let row = uiItems.indices.contains(selectedRow) ? uiItems[selectedRow].title : "No item"
         return "\(selectedSection.rawValue), \(row). \(controllerStatus). \(doricoStatus)."
     }
@@ -536,40 +533,53 @@ final class AppModel: ObservableObject {
             UIItem(id: "dorico", title: "Activate Dorico Pro", detail: doricoStatus, activate: { [weak self] in self?.detector.activate() }),
             UIItem(id: "access", title: "Grant Accessibility permission", detail: accessibilityStatus, activate: { [weak self] in self?.requestAccessibility() }),
             UIItem(id: "midi", title: "Dorico MIDI Learn setup", detail: midiStatus, activate: { [weak self] in self?.selectSection(.commands) }),
-            UIItem(id: "type", title: "Type text into Dorico with Xbox keyboard", detail: "Enter text for any focused Dorico field or open popover without a physical keyboard", activate: { [weak self] in self?.openControllerKeyboard(.typeIntoDorico) }),
+            UIItem(id: "type", title: "Type text into Dorico with Xbox keyboard", detail: "Enter text for any focused Dorico field or open popover", activate: { [weak self] in self?.openControllerKeyboard(.typeIntoDorico) }),
             UIItem(id: "jump", title: "Run a Dorico Jump Bar command", detail: "Enter and execute a Jump Bar command entirely from the Xbox controller", activate: { [weak self] in self?.openControllerKeyboard(.runJumpBar) }),
-            UIItem(id: "scan", title: "Scan every Dorico menu command", detail: "Build a live command list from the running Dorico Pro menu bar", activate: { [weak self] in self?.scanDoricoMenus() }),
+            UIItem(id: "scan", title: "Scan every Dorico menu command", detail: "Build a live command list from the running Dorico menu bar", activate: { [weak self] in self?.scanDoricoMenus() }),
             UIItem(id: "pointer", title: pointerMode ? "Turn pointer mode off" : "Turn pointer mode on", detail: "Fallback control for visual-only areas", activate: { [weak self] in self?.setPointerMode(!(self?.pointerMode ?? false)) })
         ]
     }
 
     private var mappingItems: [UIItem] {
-        activeProfile.bindings
-            .sorted {
-                if $0.key.layer != $1.key.layer { return $0.key.layer.rawValue < $1.key.layer.rawValue }
-                if $0.key.input != $1.key.input { return $0.key.input.rawValue < $1.key.input.rawValue }
-                return $0.key.gesture.rawValue < $1.key.gesture.rawValue
-            }
-            .map { key, action in
-                UIItem(
-                    id: "\(key.layer.rawValue).\(key.input.rawValue).\(key.gesture.rawValue)",
-                    title: "\(key.layer.displayName) · \(key.input.displayName) · \(key.gesture.displayName)",
-                    detail: action.summary,
-                    activate: { [weak self] in self?.clearBinding(key) }
-                )
-            }
+        var items = [UIItem(
+            id: "mapping.add",
+            title: "Add Mapping",
+            detail: "Choose an action, then press the controller input or held-button combination that should perform it",
+            activate: { [weak self] in self?.startAddMapping() }
+        )]
+        let sorted = activeProfile.bindings.sorted {
+            if $0.key.layer != $1.key.layer { return $0.key.layer.rawValue < $1.key.layer.rawValue }
+            if $0.key.input != $1.key.input { return $0.key.input.rawValue < $1.key.input.rawValue }
+            return $0.key.gesture.rawValue < $1.key.gesture.rawValue
+        }
+        for (key, action) in sorted {
+            let identity = "\(key.layer.rawValue).\(key.input.rawValue).\(key.gesture.rawValue)"
+            items.append(UIItem(
+                id: "mapping.rebind.\(identity)",
+                title: "\(key.layer.displayName) · \(key.input.displayName) · \(key.gesture.displayName)",
+                detail: "\(action.summary) — press A to rebind",
+                activate: { [weak self] in self?.beginRebind(key, action: action) }
+            ))
+            items.append(UIItem(
+                id: "mapping.delete.\(identity)",
+                title: "Delete only this mapping",
+                detail: "Remove \(key.layer.displayName) · \(key.input.displayName) → \(action.summary)",
+                activate: { [weak self] in self?.clearBinding(key) }
+            ))
+        }
+        return items
     }
 
     private var commandItems: [UIItem] {
         var items = [
             UIItem(id: "command.search.controller", title: "Search commands with Xbox keyboard", detail: commandFilter.isEmpty ? "No active filter" : "Current filter: \(commandFilter)", activate: { [weak self] in self?.openControllerKeyboard(.searchCommands, initialText: self?.commandFilter ?? "") }),
-            UIItem(id: "command.jump.map", title: "Create a Jump Bar controller mapping", detail: "Type a Jump Bar command, then press the Xbox input that should run it", activate: { [weak self] in self?.openControllerKeyboard(.mapJumpBar) })
+            UIItem(id: "command.jump.map", title: "Create a Jump Bar controller mapping", detail: "Type a Jump Bar command, then press the controller input that should run it", activate: { [weak self] in self?.openControllerKeyboard(.mapJumpBar) })
         ]
+        if mappingAddMode {
+            items.insert(UIItem(id: "mapping.add.banner", title: "Choose the new mapping action", detail: "Press A on any command below; then press the desired controller input or combination", kind: .info), at: 0)
+        }
         if !commandFilter.isEmpty {
-            items.append(UIItem(id: "command.search.clear", title: "Clear command search", detail: "Show the complete command list", activate: { [weak self] in
-                self?.commandFilter = ""
-                self?.selectedRow = 0
-            }))
+            items.append(UIItem(id: "command.search.clear", title: "Clear command search", detail: "Show the complete command list", activate: { [weak self] in self?.commandFilter = ""; self?.selectedRow = 0 }))
         }
         items.append(contentsOf: displayedCommands.map { command in
             UIItem(id: command.id, title: command.title, detail: "\(command.category) — \(command.detail)", activate: { [weak self] in self?.beginCapture(command) })
@@ -579,13 +589,10 @@ final class AppModel: ObservableObject {
 
     private var profileItems: [UIItem] {
         var items = profiles.enumerated().map { index, profile in
-            UIItem(id: profile.id.uuidString, title: (index == activeProfileIndex ? "✓ " : "") + profile.name, detail: "\(profile.bindings.count) bindings", activate: { [weak self] in
-                self?.activeProfileIndex = index
-                self?.persistProfiles()
-            })
+            UIItem(id: profile.id.uuidString, title: (index == activeProfileIndex ? "✓ " : "") + profile.name, detail: "\(profile.bindings.count) bindings", activate: { [weak self] in self?.activeProfileIndex = index; self?.persistProfiles() })
         }
         items.append(UIItem(id: "duplicate", title: "Duplicate active profile", detail: "Create an editable copy", activate: { [weak self] in self?.duplicateActiveProfile() }))
-        items.append(UIItem(id: "reset", title: "Reset active profile", detail: "Restore the complete Legato-style Dorico Pro mapping", activate: { [weak self] in self?.resetActiveProfile() }))
+        items.append(UIItem(id: "reset", title: "Reset active profile", detail: "Restore the complete Legato controller layout", activate: { [weak self] in self?.resetActiveProfile() }))
         items.append(UIItem(id: "export", title: "Export profiles", detail: "Save all mappings as JSON", activate: { [weak self] in self?.exportProfiles() }))
         items.append(UIItem(id: "import", title: "Import profiles", detail: "Load mappings from JSON", activate: { [weak self] in self?.importProfiles() }))
         return items
