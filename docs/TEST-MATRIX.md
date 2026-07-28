@@ -12,7 +12,7 @@ This matrix separates what CI can prove from what requires a licensed Dorico Pro
 - [x] Ad-hoc code-signing verification passes.
 - [x] ZIP packaging succeeds.
 - [x] DMG creation and `hdiutil verify` succeed.
-- [x] Mapping-layer precedence, helper input isolation, B/back interception, repeat fallback, hold/double-press behavior, profile JSON round-trip, routed Xbox text serialization, default popover/Jump Bar routes, MIDI addressing, and universal fallback catalog coverage are unit-tested.
+- [x] Mapping-layer precedence, spatial helper routing, bumper adjustment, helper input isolation, B/back interception, repeat fallback, hold/double-press behavior, profile JSON round-trip, routed Xbox text serialization, default popover/Jump Bar routes, MIDI addressing, and universal fallback catalog coverage are unit-tested.
 
 ## Test environment record
 
@@ -79,15 +79,21 @@ Confirm press, release, remap capture, and diagnostic reporting where the operat
 ## Dashboard controller operation
 
 - [ ] View opens the dashboard from Dorico.
-- [ ] View closes or toggles the dashboard as configured.
-- [ ] A activates the highlighted item.
+- [ ] View or Guide hides the dashboard while it is focused.
+- [ ] The selected sidebar section has a distinct controller-focus outline.
+- [ ] Left moves from every content row, including every Settings row, to the visible sidebar.
+- [ ] Right or A moves from the sidebar into the selected section's content.
+- [ ] Up/down move between sections while the sidebar is focused.
+- [ ] Up/down move between rows while the content column is focused.
+- [ ] A activates the highlighted content item.
+- [ ] LB decreases the focused adjustable value.
+- [ ] RB increases the focused adjustable value.
+- [ ] Held LB/RB adjustment repeats using the configured repeat timing.
+- [ ] Non-adjustable content does not execute a Dorico command when LB/RB is pressed.
 - [ ] B cancels mapping capture before doing anything else.
-- [ ] B returns to Status from another section.
+- [ ] B returns to the Status sidebar from another section.
 - [ ] B hides the dashboard from Status.
-- [ ] D-pad and left stick move through every visible row.
-- [ ] Left/right cross sections when the current row is not adjustable.
-- [ ] Left/right adjust settings when the current row is adjustable.
-- [ ] Navigation wraps without trapping focus inside a list.
+- [ ] Sidebar and content navigation wrap without trapping focus inside either column.
 - [ ] Status, Mappings, Commands, Profiles, Settings, and Diagnostics are all reachable.
 - [ ] Every action in those sections is operable without a physical mouse or keyboard.
 - [ ] Repeat delay changes take effect.
@@ -143,7 +149,8 @@ Test command search, arbitrary Dorico text, routed popovers, Jump Bar execution,
 - [ ] Controller keyboard submission hides the dashboard, activates Dorico, and sends text only after Dorico is frontmost.
 - [ ] No keyboard command is sent to Safari, Finder, Messages, or another unrelated app.
 - [ ] Dashboard A/B/D-pad input never leaks into Dorico while the dashboard is active.
-- [ ] Dashboard X/Y/Menu/trigger/bumper input is consumed locally or ignored rather than leaking into Dorico.
+- [ ] Dashboard X/Y/Menu/trigger input is consumed locally or ignored rather than leaking into Dorico.
+- [ ] Dashboard LB/RB only adjust helper values and never trigger Dorico layer actions.
 - [ ] Pointer mode is the only intentional global-pointer route.
 - [ ] Disabling the bridge stops routed commands immediately.
 
@@ -265,6 +272,7 @@ Use the default LT + RT routes. Each route must open the Xbox keyboard first, th
 - [ ] Rapidly alternate LT/RT layers 100 times without a stuck layer.
 - [ ] Disconnect while both triggers are held; reconnect and confirm base layer.
 - [ ] Open/close the dashboard 100 times.
+- [ ] Move between sidebar/content and adjust Settings values 100 times without a focus trap.
 - [ ] Open, type, submit, and cancel the Xbox keyboard 100 times.
 - [ ] Scan Dorico menus repeatedly without duplicate growth or a crash.
 - [ ] Switch profiles repeatedly during Dorico playback.
