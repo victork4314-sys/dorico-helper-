@@ -205,7 +205,7 @@ final class XboxControllerManager {
                 relativeTime: 0
             )
             let pattern = try CHHapticPattern(events: [event], parameters: [])
-            let player = try hapticEngine.makePlayer(withLocality: .default)
+            let player = try hapticEngine.makePlayer(with: pattern)
             try player.start(atTime: 0)
         } catch {
             model?.log("Haptic failed: \(error.localizedDescription)")
