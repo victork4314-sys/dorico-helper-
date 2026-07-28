@@ -13,6 +13,8 @@ jobs:
         run: swift --version
       - name: Verify controller routing safety rails
         run: bash scripts/verify-controller-routing.sh
+      - name: Verify arbitrary mapping safety rails
+        run: bash scripts/verify-arbitrary-mappings.sh
       - name: Test core and compile native target
         run: |
           set -o pipefail
