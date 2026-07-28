@@ -16,38 +16,27 @@ final class DoricoTextRouteTests: XCTestCase {
             "xbox.popover.playing": .playingTechniquesPopover,
             "xbox.popover.bars": .barsAndBarlinesPopover
         ]
-
         for (id, route) in expected {
             XCTAssertEqual(DefaultCatalog.action(id), .controllerText(route), "Wrong or missing controller text action: \(id)")
         }
     }
 
-    func testDefaultXboxProfileRoutesAllTextDrivenPopoversThroughControllerKeyboard() {
+    func testExactLegatoDefaultUsesOnlyOrnamentsOnBaseX() {
         let profile = DefaultCatalog.legatoStyleProfile
-        let expected: [(XboxInput, DoricoTextRoute)] = [
-            (.buttonA, .dynamicsPopover),
-            (.buttonB, .ornamentsPopover),
-            (.buttonX, .meterPopover),
-            (.buttonY, .keySignaturePopover),
-            (.dpadUp, .tempoPopover),
-            (.dpadDown, .clefPopover),
-            (.dpadLeft, .playingTechniquesPopover),
-            (.dpadRight, .barsAndBarlinesPopover)
-        ]
-
-        for (input, route) in expected {
-            XCTAssertEqual(
-                profile.action(for: BindingKey(layer: .bothTriggers, input: input)),
-                .controllerText(route),
-                "Both-trigger route is wrong for \(input.displayName)"
-            )
-        }
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonX)), .controllerText(.ornamentsPopover))
+        XCTAssertNil(profile.action(for: BindingKey(layer: .bothTriggers, input: .buttonA)))
+        XCTAssertNil(profile.action(for: BindingKey(layer: .leftBumper, input: .buttonA)))
     }
 
-    func testDefaultLeftBumperLayerProvidesFocusedTextAndBothJumpBarModes() {
-        let profile = DefaultCatalog.legatoStyleProfile
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .leftBumper, input: .buttonA)), .controllerText(.focusedField))
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .leftBumper, input: .buttonX)), .controllerText(.jumpBarCommands))
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .leftBumper, input: .buttonY)), .controllerText(.jumpBarGoTo))
+    func testEveryOtherTextRouteRemainsAvailableForAddMapping() {
+        let ids = [
+            "xbox.text.focused", "xbox.jump.commands", "xbox.jump.goto",
+            "xbox.popover.dynamics", "xbox.popover.meter", "xbox.popover.key",
+            "xbox.popover.tempo", "xbox.popover.clef", "xbox.popover.playing",
+            "xbox.popover.bars"
+        ]
+        for id in ids {
+            XCTAssertNotEqual(DefaultCatalog.action(id), .none, "Add Mapping lost text route \(id)")
+        }
     }
 }
