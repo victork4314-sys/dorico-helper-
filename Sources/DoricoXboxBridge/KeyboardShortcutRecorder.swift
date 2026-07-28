@@ -48,7 +48,7 @@ private struct ShortcutCaptureField: NSViewRepresentable {
 
 private final class ShortcutTextField: NSTextField {
     var onCapture: ((KeyChord) -> Void)?
-    private var activeModifiers = Set<KeyModifier>()
+    private var peakModifiers = Set<KeyModifier>()
     private var capturedNonModifier = false
 
     override init(frame frameRect: NSRect) {
@@ -73,12 +73,16 @@ private final class ShortcutTextField: NSTextField {
 
     override func becomeFirstResponder() -> Bool {
         let result = super.becomeFirstResponder()
-        if result { stringValue = "Recording…" }
+        if result {
+            peakModifiers.removeAll()
+            capturedNonModifier = false
+            stringValue = "Recording…"
+        }
         return result
     }
 
     override func resignFirstResponder() -> Bool {
-        activeModifiers.removeAll()
+        peakModifiers.removeAll()
         capturedNonModifier = false
         return super.resignFirstResponder()
     }
@@ -87,10 +91,10 @@ private final class ShortcutTextField: NSTextField {
         guard !event.isARepeat else { return }
         capturedNonModifier = true
         let modifiers = Self.modifiers(from: event.modifierFlags)
-        let characters = Self.displayCharacters(for: event)
+        peakModifiers.formUnion(modifiers)
         let chord = KeyChord(
             capturedKeyCode: event.keyCode,
-            characters: characters,
+            characters: Self.displayCharacters(for: event),
             modifiers: modifiers
         )
         stringValue = chord.displayName
@@ -100,16 +104,16 @@ private final class ShortcutTextField: NSTextField {
     override func flagsChanged(with event: NSEvent) {
         let modifiers = Self.modifiers(from: event.modifierFlags)
         if !modifiers.isEmpty {
-            activeModifiers = modifiers
-            capturedNonModifier = false
-            stringValue = KeyChord(modifiersOnly: modifiers).displayName + " …"
-        } else if !activeModifiers.isEmpty {
+            if peakModifiers.isEmpty { capturedNonModifier = false }
+            peakModifiers.formUnion(modifiers)
+            stringValue = KeyChord(modifiersOnly: peakModifiers).displayName + " …"
+        } else if !peakModifiers.isEmpty {
             if !capturedNonModifier {
-                let chord = KeyChord(modifiersOnly: activeModifiers)
+                let chord = KeyChord(modifiersOnly: peakModifiers)
                 stringValue = chord.displayName
                 onCapture?(chord)
             }
-            activeModifiers.removeAll()
+            peakModifiers.removeAll()
             capturedNonModifier = false
         }
     }
@@ -129,12 +133,12 @@ private final class ShortcutTextField: NSTextField {
     private static func displayCharacters(for event: NSEvent) -> String {
         if let characters = event.characters,
            !characters.isEmpty,
-           characters.unicodeScalars.allSatisfy({ !$0.properties.isControl }) {
+           characters.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) {
             return characters
         }
         if let characters = event.charactersIgnoringModifiers,
            !characters.isEmpty,
-           characters.unicodeScalars.allSatisfy({ !$0.properties.isControl }) {
+           characters.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) {
             return characters
         }
         return specialKeyName(event.keyCode)
