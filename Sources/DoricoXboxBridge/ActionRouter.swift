@@ -31,8 +31,12 @@ final class ActionRouter {
         switch action {
         case .internalCommand(let command):
             model?.handleInternal(command)
+            if model?.dashboardVisible == true {
+                accessibility.hideFocusSelector()
+            }
         case .controllerText(let route):
             guard let model else { return }
+            accessibility.hideFocusSelector()
             DoricoTextRouteCoordinator.shared.begin(route, model: model)
         case .pointer(let operation):
             performPointer(operation)
@@ -42,6 +46,7 @@ final class ActionRouter {
         case .keyChord(let chord):
             guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
             KeyEmitter.send(chord)
+            await refreshFocusSelectorAfterDoricoAction()
         case .typeText(let text):
             if let routedAction = DoricoTextRouteCoordinator.shared.consumeAction(for: text) {
                 try await executeThrowing(routedAction)
@@ -52,6 +57,7 @@ final class ActionRouter {
         case .menuPath(let path):
             guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
             try accessibility.performMenuPath(path, detector: detector)
+            await refreshFocusSelectorAfterDoricoAction(delayMilliseconds: 90)
         case .accessibility(let operation):
             guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
             try accessibility.perform(operation, detector: detector)
@@ -65,6 +71,11 @@ final class ActionRouter {
         case .none:
             break
         }
+    }
+
+    private func refreshFocusSelectorAfterDoricoAction(delayMilliseconds: UInt64 = 65) async {
+        try? await Task.sleep(for: .milliseconds(delayMilliseconds))
+        try? accessibility.refreshFocusSelector(detector: detector)
     }
 
     private func prepareDoricoTarget() -> Bool {

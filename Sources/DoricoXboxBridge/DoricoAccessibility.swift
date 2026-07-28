@@ -32,6 +32,8 @@ final class DoricoAccessibility {
         var title: String
     }
 
+    private let focusSelector = FocusSelectorOverlay()
+
     var isTrusted: Bool { AXIsProcessTrusted() }
 
     func requestPermission() {
@@ -94,6 +96,25 @@ final class DoricoAccessibility {
         case .scanPrevious:
             try scanFocus(application: application, delta: -1)
         }
+    }
+
+    func refreshFocusSelector(detector: DoricoDetector) throws {
+        guard isTrusted else { throw BridgeError.permissionRequired }
+        guard detector.isFrontmost() else {
+            focusSelector.hide()
+            return
+        }
+        guard let app = detector.runningApplication() else { throw BridgeError.doricoNotRunning }
+        let application = AXUIElementCreateApplication(app.processIdentifier)
+        guard let focused: AXUIElement = attribute(AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute) ?? attribute(application, kAXFocusedUIElementAttribute) else {
+            focusSelector.hide()
+            throw BridgeError.noFocusedElement
+        }
+        showFocusSelector(for: focused)
+    }
+
+    func hideFocusSelector() {
+        focusSelector.hide()
     }
 
     private func collectMenuCommands(
@@ -205,6 +226,7 @@ final class DoricoAccessibility {
         guard let focused: AXUIElement = attribute(AXUIElementCreateSystemWide(), kAXFocusedUIElementAttribute) ?? attribute(application, kAXFocusedUIElementAttribute) else {
             throw BridgeError.noFocusedElement
         }
+        showFocusSelector(for: focused)
         let supported = actionNames(of: focused)
         for action in preferredActions where supported.contains(action) {
             if AXUIElementPerformAction(focused, action as CFString) == .success { return }
@@ -264,6 +286,41 @@ final class DoricoAccessibility {
         } else {
             _ = AXUIElementPerformAction(element, kAXRaiseAction as CFString)
         }
+        showFocusSelector(for: element)
+    }
+
+    private func showFocusSelector(for focused: AXUIElement) {
+        let visual = preferredVisualElement(from: focused)
+        guard let visualFrame = frame(of: visual) else {
+            focusSelector.hide()
+            return
+        }
+        focusSelector.show(axFrame: visualFrame, title: selectorTitle(visual))
+    }
+
+    private func preferredVisualElement(from focused: AXUIElement) -> AXUIElement {
+        for attributeName in ["AXSelectedChildren", "AXSelectedRows", "AXSelectedCells"] {
+            let selected: [AXUIElement] = attribute(focused, attributeName) ?? []
+            if let first = selected.first(where: { frame(of: $0).map { $0.width > 1 && $0.height > 1 } ?? false }) {
+                return first
+            }
+        }
+
+        if let selectedChild = children(of: focused).first(where: { child in
+            let selected: Bool = attribute(child, "AXSelected") ?? false
+            return selected && (frame(of: child).map { $0.width > 1 && $0.height > 1 } ?? false)
+        }) {
+            return selectedChild
+        }
+
+        return focused
+    }
+
+    private func selectorTitle(_ element: AXUIElement) -> String {
+        let title = normalizedTitle(element)
+        if !title.isEmpty { return title }
+        let role: String = attribute(element, kAXRoleAttribute) ?? "Dorico selection"
+        return role.replacingOccurrences(of: "AX", with: "")
     }
 
     private func normalizedTitle(_ element: AXUIElement) -> String {

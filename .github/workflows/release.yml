@@ -1,0 +1,44 @@
+name: Publish latest macOS release
+
+on:
+  workflow_run:
+    workflows: ["macOS build and tests"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the validated Universal 2 installers
+        uses: actions/download-artifact@v4
+        with:
+          name: DoricoXboxBridge-macOS-Universal
+          path: release-assets
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.event.workflow_run.run_number }}
+          name: Dorico Xbox Bridge v0.1.${{ github.event.workflow_run.run_number }}
+          target_commitish: ${{ github.event.workflow_run.head_sha }}
+          make_latest: true
+          fail_on_unmatched_files: true
+          body: |
+            Native macOS controller bridge for Dorico Pro 6.1 and Xbox controllers.
+
+            **Recommended download:** `Dorico-Xbox-Bridge-macOS-Universal.dmg`
+
+            The app is Universal 2 and contains both Apple Silicon (`arm64`) and Intel (`x86_64`) code. It is ad-hoc signed, so macOS may require Control-click → Open on first launch. Grant Accessibility permission in System Settings → Privacy & Security → Accessibility.
+          files: |
+            release-assets/Dorico-Xbox-Bridge-macOS-Universal.dmg
+            release-assets/Dorico-Xbox-Bridge-macOS-Universal.zip
