@@ -50,7 +50,7 @@ struct ControllerKeyboardView: View {
                             keyboard.selectedIndex = index
                             keyboard.insertSelectedKey()
                         } label: {
-                            Text(key)
+                            Text(key == "SPACE" ? "Space" : key)
                                 .font(.system(.body, design: .rounded).weight(index == keyboard.selectedIndex ? .bold : .regular))
                                 .frame(maxWidth: .infinity, minHeight: 36)
                                 .background(index == keyboard.selectedIndex ? Color.accentColor : Color(nsColor: .controlBackgroundColor))
@@ -62,15 +62,15 @@ struct ControllerKeyboardView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 7))
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(key)\(index == keyboard.selectedIndex ? ", selected" : "")")
+                        .accessibilityLabel("\(key == "SPACE" ? "Space" : key)\(index == keyboard.selectedIndex ? ", selected" : "")")
                     }
                 }
 
                 HStack(spacing: 16) {
                     legend("D-pad / left stick", "Move")
                     legend("A", "Type")
-                    legend("B", "Delete / back")
-                    legend("X", "Space")
+                    legend("B", "Cancel")
+                    legend("X", "Erase")
                     legend("Y / bumpers", "Next page")
                     legend("Menu / right-stick click", "Submit")
                     Spacer()
