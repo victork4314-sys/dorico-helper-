@@ -12,7 +12,7 @@ This matrix separates what CI can prove from what requires a licensed Dorico Pro
 - [x] Ad-hoc code-signing verification passes.
 - [x] ZIP packaging succeeds.
 - [x] DMG creation and `hdiutil verify` succeed.
-- [x] Mapping-layer precedence, helper input isolation, B/back interception, repeat fallback, hold/double-press behavior, profile JSON round-trip, MIDI addressing, and universal fallback catalog coverage are unit-tested.
+- [x] Mapping-layer precedence, helper input isolation, B/back interception, repeat fallback, hold/double-press behavior, profile JSON round-trip, routed Xbox text serialization, default popover/Jump Bar routes, MIDI addressing, and universal fallback catalog coverage are unit-tested.
 
 ## Test environment record
 
@@ -100,15 +100,15 @@ Confirm press, release, remap capture, and diagnostic reporting where the operat
 
 ## Xbox controller keyboard
 
-Test command search, arbitrary Dorico text, Jump Bar execution, and Jump Bar mapping:
+Test command search, arbitrary Dorico text, routed popovers, Jump Bar execution, and Jump Bar mapping:
 
 - [ ] The keyboard opens from Status and Commands without a physical keyboard.
 - [ ] D-pad and left stick move horizontally and vertically through every visible key.
 - [ ] Grid movement wraps without trapping the selected key.
 - [ ] A types the selected character.
-- [ ] B deletes one character when text is present.
-- [ ] B closes the keyboard when the text is empty.
-- [ ] X inserts a space.
+- [ ] B cancels immediately on the first press, regardless of entered text.
+- [ ] X erases the last character.
+- [ ] The selectable Space key inserts a space.
 - [ ] Y changes between uppercase/music, lowercase, and symbols pages.
 - [ ] Either bumper changes the keyboard page.
 - [ ] Menu submits the entered text.
@@ -117,6 +117,8 @@ Test command search, arbitrary Dorico text, Jump Bar execution, and Jump Bar map
 - [ ] Uppercase, lowercase, digits, punctuation, flat, sharp, double-flat, and double-sharp characters render correctly.
 - [ ] Held directional movement repeats according to the active repeat settings.
 - [ ] Command search can be entered, changed, and cleared entirely through the Xbox keyboard.
+- [ ] Cancelling a routed keyboard clears its pending Dorico route.
+- [ ] A later plain text action cannot inherit a cancelled popover or Jump Bar route.
 
 ## Mapping and profiles
 
@@ -141,6 +143,7 @@ Test command search, arbitrary Dorico text, Jump Bar execution, and Jump Bar map
 - [ ] Controller keyboard submission hides the dashboard, activates Dorico, and sends text only after Dorico is frontmost.
 - [ ] No keyboard command is sent to Safari, Finder, Messages, or another unrelated app.
 - [ ] Dashboard A/B/D-pad input never leaks into Dorico while the dashboard is active.
+- [ ] Dashboard X/Y/Menu/trigger/bumper input is consumed locally or ignored rather than leaking into Dorico.
 - [ ] Pointer mode is the only intentional global-pointer route.
 - [ ] Disabling the bridge stops routed commands immediately.
 
@@ -173,27 +176,32 @@ Test in Setup, Write, Engrave, Play, and Print where the command is meaningful:
 
 ## Dorico popovers
 
-Open, enter representative text through the controller keyboard or macro path, confirm, and cancel each:
+Use the default LT + RT routes. Each route must open the Xbox keyboard first, then return to Dorico, open the correct popover, enter text, and confirm:
 
-- [ ] Dynamics
-- [ ] Ornaments
-- [ ] Time signature
-- [ ] Key signature
-- [ ] Tempo
-- [ ] Clef
-- [ ] Playing techniques
-- [ ] Bars and barlines
+- [ ] LT + RT + A: Dynamics
+- [ ] LT + RT + B: Ornaments
+- [ ] LT + RT + X: Time signature
+- [ ] LT + RT + Y: Key signature
+- [ ] LT + RT + D-pad Up: Tempo
+- [ ] LT + RT + D-pad Down: Clef
+- [ ] LT + RT + D-pad Left: Playing techniques
+- [ ] LT + RT + D-pad Right: Bars and barlines
 - [ ] Controller-entered Unicode text reaches Dorico without corruption.
-- [ ] B cancels an open popover.
+- [ ] B cancels keyboard entry before Dorico is changed.
+- [ ] B/Escape cancels an already-open Dorico popover.
 
 ## Jump Bar
 
+- [ ] LB + X opens the Xbox keyboard for Jump Bar Commands.
+- [ ] LB + Y opens the Xbox keyboard for Jump Bar Go To.
+- [ ] LB + A opens generic focused-field Dorico text entry.
 - [ ] “Run a Dorico Jump Bar command” opens the Xbox keyboard.
 - [ ] Submitting hides the helper and activates Dorico.
 - [ ] Jump Bar opens with J.
 - [ ] Commands mode opens with Control-1 on macOS.
+- [ ] Go To mode opens with Control-2 on macOS.
 - [ ] The entered controller text reaches the Jump Bar.
-- [ ] Return executes the command automatically after submission.
+- [ ] Return executes the command or location automatically after submission.
 - [ ] “Create a Jump Bar controller mapping” accepts text, then starts Xbox input capture.
 - [ ] The captured Xbox input runs the saved Jump Bar macro later.
 - [ ] B cancels keyboard entry and Dorico Escape closes an open Jump Bar.
@@ -233,8 +241,8 @@ Open, enter representative text through the controller keyboard or macro path, c
 - [ ] LB + RB + Y increments sliders or steppers.
 - [ ] LB + RB + X decrements sliders or steppers.
 - [ ] LB + RB + Menu opens the focused control menu.
-- [ ] LB + RB + D-pad right scans next.
-- [ ] LB + RB + D-pad left scans previous.
+- [ ] LB + RB + D-pad Right scans next.
+- [ ] LB + RB + D-pad Left scans previous.
 - [ ] Setup, Write, Engrave, Play, and Print each remain navigable.
 
 ## Pointer fallback
