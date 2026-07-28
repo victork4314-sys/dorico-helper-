@@ -20,7 +20,10 @@ jobs:
       - name: Build and triple-verify Universal 2 app, ZIP, and DMG
         run: |
           set -o pipefail
-          SKIP_TESTS=1 BUILD_NUMBER="$GITHUB_RUN_NUMBER" bash scripts/build-app.sh 2>&1 | tee app-package.log
+          SOURCE_COMMIT_SHA="${{ github.event.pull_request.head.sha || github.sha }}" \
+          SKIP_TESTS=1 \
+          BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+          bash scripts/build-app.sh 2>&1 | tee app-package.log
       - name: Upload compiler and packaging logs
         if: always()
         uses: actions/upload-artifact@v4
