@@ -119,6 +119,9 @@ public struct BindingResolver: Sendable {
                 return .internalCommand(.helperBack)
             case .buttonA where emission.gesture == .press:
                 return .internalCommand(.helperActivate)
+            case .view where emission.gesture == .press,
+                 .guide where emission.gesture == .press:
+                return .internalCommand(.toggleDashboard)
             case .dpadUp where emission.gesture == .press || emission.gesture == .repeatPress,
                  .leftStickUp where emission.gesture == .press || emission.gesture == .repeatPress:
                 return .internalCommand(.helperUp)
