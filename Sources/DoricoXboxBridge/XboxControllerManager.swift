@@ -25,6 +25,13 @@ final class XboxControllerManager {
     }
 
     func start() {
+        // macOS 11.3 and later defaults this to false. Without enabling it,
+        // GameController stops forwarding Xbox input as soon as Dorico becomes
+        // the frontmost app, which makes the bridge appear to work only inside
+        // its own dashboard.
+        GCController.shouldMonitorBackgroundEvents = true
+        model?.log("Background Xbox input monitoring enabled")
+
         observers.append(NotificationCenter.default.addObserver(
             forName: .GCControllerDidConnect,
             object: nil,
@@ -198,7 +205,7 @@ final class XboxControllerManager {
                 relativeTime: 0
             )
             let pattern = try CHHapticPattern(events: [event], parameters: [])
-            let player = try hapticEngine.makePlayer(with: pattern)
+            let player = try hapticEngine.makePlayer(withLocality: .default)
             try player.start(atTime: 0)
         } catch {
             model?.log("Haptic failed: \(error.localizedDescription)")
