@@ -30,8 +30,6 @@ final class XboxControllerManager {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            // Re-read GameController's registry on the main actor instead of
-            // sending a non-Sendable GCController across an actor boundary.
             Task { @MainActor [weak self] in self?.reconcileControllers() }
         })
         observers.append(NotificationCenter.default.addObserver(
@@ -48,6 +46,7 @@ final class XboxControllerManager {
 
     func updateThresholds() {
         digitalStates.removeAll()
+        model?.resetControllerState()
     }
 
     private func reconcileControllers() {
@@ -68,6 +67,10 @@ final class XboxControllerManager {
             model?.log("Ignored non-Xbox controller: \(candidate.vendorName ?? candidate.productCategory)")
             return
         }
+        if controller !== candidate {
+            digitalStates.removeAll()
+            model?.resetControllerState()
+        }
         controller = candidate
         attach(candidate)
         prepareHaptics(candidate)
@@ -80,6 +83,7 @@ final class XboxControllerManager {
         controller = nil
         hapticEngine = nil
         digitalStates.removeAll()
+        model?.resetControllerState()
         model?.controllerStatus = "No Xbox controller connected"
         model?.log("Xbox controller disconnected")
     }
