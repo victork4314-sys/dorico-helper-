@@ -4,16 +4,19 @@ import SwiftUI
 import DoricoBridgeCore
 
 struct ControllerMappingTarget: Identifiable {
-    let input: XboxInput
-    var id: String { input.rawValue }
+    let inputs: Set<XboxInput>
+
+    var id: String {
+        XboxInput.allCases.filter(inputs.contains).map(\.rawValue).joined(separator: "+")
+    }
 }
 
 struct MappingActionPickerView: View {
     @ObservedObject var model: AppModel
-    let input: XboxInput
+    let inputs: Set<XboxInput>
     @Environment(\.dismiss) private var dismiss
 
-    @State private var layer: MappingLayer
+    @State private var pointerContext: Bool
     @State private var gesture: BindingGesture
     @State private var search = ""
     @State private var customKey = ""
@@ -29,10 +32,10 @@ struct MappingActionPickerView: View {
     @State private var macroName = ""
     @State private var macroSteps = ""
 
-    init(model: AppModel, input: XboxInput) {
+    init(model: AppModel, inputs: Set<XboxInput>) {
         self.model = model
-        self.input = input
-        _layer = State(initialValue: model.selectedLayer)
+        self.inputs = inputs
+        _pointerContext = State(initialValue: model.selectedLayer == .pointer)
         _gesture = State(initialValue: model.selectedGesture)
     }
 
@@ -60,8 +63,19 @@ struct MappingActionPickerView: View {
         }.prefix(120))
     }
 
+    private var combinationName: String {
+        XboxInput.allCases
+            .filter(inputs.contains)
+            .map(\.displayName)
+            .joined(separator: " + ")
+    }
+
     private var currentAction: CommandAction? {
-        model.mappedAction(for: input, layer: layer, gesture: gesture)
+        model.mappedAction(
+            for: inputs,
+            pointerMode: pointerContext,
+            gesture: gesture
+        )
     }
 
     var body: some View {
@@ -85,9 +99,9 @@ struct MappingActionPickerView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Map \(input.displayName)")
+                Text("Map \(combinationName)")
                     .font(.title2.weight(.semibold))
-                Text("Changes apply only to “\(model.activeProfileName)”.")
+                Text("Every selected control must be held. Changes apply only to “\(model.activeProfileName)”.")
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -98,20 +112,23 @@ struct MappingActionPickerView: View {
 
     private var targetSettings: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Button and context", icon: "gamecontroller")
-            HStack(spacing: 14) {
-                Picker("Context", selection: $layer) {
-                    ForEach(MappingLayer.allCases, id: \.self) { value in
-                        Text(value.displayName).tag(value)
-                    }
-                }
+            sectionTitle("Exact combination and context", icon: "gamecontroller")
+            Text(combinationName)
+                .font(.headline)
+                .textSelection(.enabled)
+            HStack(spacing: 18) {
+                Toggle("Only in pointer mode", isOn: $pointerContext)
                 Picker("Gesture", selection: $gesture) {
                     ForEach(BindingGesture.allCases, id: \.self) { value in
                         Text(value.displayName).tag(value)
                     }
                 }
+                .frame(maxWidth: 260)
             }
-            Text(currentAction.map { "Current action: \($0.summary)" } ?? "This slot is currently unmapped.")
+            Text("Extra held controls create a different combination. Smaller mappings never fire underneath this one.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Text(currentAction.map { "Current action: \($0.summary)" } ?? "This exact combination is currently unmapped.")
                 .font(.callout)
                 .foregroundStyle(currentAction == nil ? Color.secondary : Color.accentColor)
         }
@@ -238,8 +255,12 @@ struct MappingActionPickerView: View {
     private var deleteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Remove mapping", icon: "trash")
-            Button("Remove only this slot", role: .destructive) {
-                model.removeDirectMapping(for: input, layer: layer, gesture: gesture)
+            Button("Remove only this exact combination", role: .destructive) {
+                model.removeDirectMapping(
+                    for: inputs,
+                    pointerMode: pointerContext,
+                    gesture: gesture
+                )
                 dismiss()
             }
             .disabled(currentAction == nil)
@@ -316,7 +337,12 @@ struct MappingActionPickerView: View {
     }
 
     private func assign(_ descriptor: ActionDescriptor) {
-        model.assignAction(descriptor, to: input, layer: layer, gesture: gesture)
+        model.assignAction(
+            descriptor,
+            to: inputs,
+            pointerMode: pointerContext,
+            gesture: gesture
+        )
         dismiss()
     }
 }
