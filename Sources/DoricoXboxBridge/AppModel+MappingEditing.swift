@@ -17,45 +17,65 @@ extension AppModel {
     }
 
     func mappedAction(
+        for inputs: Set<XboxInput>,
+        pointerMode: Bool,
+        gesture: BindingGesture
+    ) -> CommandAction? {
+        guard !inputs.isEmpty else { return nil }
+        return activeProfile.bindings[
+            BindingKey(inputs: inputs, pointerMode: pointerMode, gesture: gesture)
+        ]
+    }
+
+    func mappedAction(
         for input: XboxInput,
         layer: MappingLayer,
         gesture: BindingGesture
     ) -> CommandAction? {
-        activeProfile.bindings[BindingKey(layer: layer, input: input, gesture: gesture)]
+        mappedAction(
+            for: layer.modifierInputs.union([input]),
+            pointerMode: layer == .pointer,
+            gesture: gesture
+        )
     }
 
     func assignAction(
         _ descriptor: ActionDescriptor,
-        to input: XboxInput,
-        layer: MappingLayer,
+        to inputs: Set<XboxInput>,
+        pointerMode: Bool,
         gesture: BindingGesture
     ) {
-        let key = BindingKey(layer: layer, input: input, gesture: gesture)
+        guard !inputs.isEmpty else {
+            captureMessage = "Choose at least one controller control."
+            return
+        }
+        let key = BindingKey(inputs: inputs, pointerMode: pointerMode, gesture: gesture)
         var profile = activeProfile
         let replaced = profile.bindings.updateValue(descriptor.action, forKey: key)
         activeProfile = profile
-        selectedLayer = layer
+        selectedLayer = pointerMode ? .pointer : .base
         selectedGesture = gesture
         let replacementText = replaced == nil ? "Added" : "Replaced"
-        captureMessage = "\(replacementText) \(layer.displayName) · \(input.displayName) with \(descriptor.title) in “\(profile.name)” only."
-        log("\(replacementText) mapping in \(profile.name): \(layer.displayName) · \(input.displayName) · \(gesture.displayName) → \(descriptor.title)")
+        captureMessage = "\(replacementText) \(key.displayName) with \(descriptor.title) in “\(profile.name)” only."
+        log("\(replacementText) exact combination in \(profile.name): \(key.displayName) · \(gesture.displayName) → \(descriptor.title)")
         testHaptic()
     }
 
     func removeDirectMapping(
-        for input: XboxInput,
-        layer: MappingLayer,
+        for inputs: Set<XboxInput>,
+        pointerMode: Bool,
         gesture: BindingGesture
     ) {
-        let key = BindingKey(layer: layer, input: input, gesture: gesture)
+        guard !inputs.isEmpty else { return }
+        let key = BindingKey(inputs: inputs, pointerMode: pointerMode, gesture: gesture)
         var profile = activeProfile
         guard let removed = profile.bindings.removeValue(forKey: key) else {
-            captureMessage = "No mapping exists for \(layer.displayName) · \(input.displayName) · \(gesture.displayName)."
+            captureMessage = "No mapping exists for \(key.displayName) · \(gesture.displayName)."
             return
         }
         activeProfile = profile
-        captureMessage = "Removed \(removed.summary) from \(input.displayName) in “\(profile.name)” only."
-        log("Removed mapping from \(profile.name): \(layer.displayName) · \(input.displayName) · \(gesture.displayName)")
+        captureMessage = "Removed \(removed.summary) from \(key.displayName) in “\(profile.name)” only."
+        log("Removed exact combination from \(profile.name): \(key.displayName) · \(gesture.displayName)")
     }
 
     func customKeyDescriptor(key: String, modifiers: Set<KeyModifier>) -> ActionDescriptor? {
