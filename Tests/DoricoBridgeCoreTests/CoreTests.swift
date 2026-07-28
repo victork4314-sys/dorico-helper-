@@ -23,6 +23,20 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(action, .internalCommand(.helperBack))
     }
 
+    func testHelperConsumesUnmappedControls() {
+        let resolver = BindingResolver()
+        for input in [XboxInput.buttonX, .buttonY, .menu, .leftTrigger, .rightBumper] {
+            let action = resolver.resolve(
+                emission: GestureEmission(input: input, gesture: .press, timestamp: 1),
+                heldInputs: [input],
+                pointerMode: false,
+                helperUIActive: true,
+                profile: DefaultCatalog.legatoStyleProfile
+            )
+            XCTAssertNil(action, "\(input.displayName) leaked through the active helper UI")
+        }
+    }
+
     func testRepeatFallsBackToPressBinding() {
         let resolver = BindingResolver()
         let emission = GestureEmission(input: .dpadRight, gesture: .repeatPress, timestamp: 1)
