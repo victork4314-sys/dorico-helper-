@@ -14,6 +14,13 @@ public struct ControllerInputState: Sendable {
         value: Float,
         timestamp: TimeInterval
     ) -> ControllerEvent? {
+        if states[input] == nil {
+            states[input] = pressed
+            // Establishing an initial released state must not manufacture a
+            // release event at startup. An initially held control is real input.
+            guard pressed else { return nil }
+            return ControllerEvent(input: input, isPressed: true, value: value, timestamp: timestamp)
+        }
         guard states[input] != pressed else { return nil }
         states[input] = pressed
         return ControllerEvent(input: input, isPressed: pressed, value: value, timestamp: timestamp)
