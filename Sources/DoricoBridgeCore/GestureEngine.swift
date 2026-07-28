@@ -21,12 +21,16 @@ public struct GestureEngine: Sendable {
     private var rawStates: [XboxInput: RawState] = [:]
     private var pressedAt: [XboxInput: TimeInterval] = [:]
     private var pendingPress: PendingPress?
+
     private var activeChord: Set<XboxInput> = []
     private var activePrimary: XboxInput?
     private var activeChordStartedAt: TimeInterval = 0
     private var activeNextRepeatAt: TimeInterval = 0
     private var activeHoldEmitted = false
     private var activePressEmittedChord: Set<XboxInput>?
+
+    private var suppressUntilAllReleased = false
+    private var releasedSessionChord: Set<XboxInput>?
     private var lastReleasedChord: Set<XboxInput>?
     private var lastReleaseAt: TimeInterval?
 
@@ -38,42 +42,41 @@ public struct GestureEngine: Sendable {
         pointerMode: Bool = false,
         rawMode: Bool = false
     ) -> [GestureEmission] {
-        if rawMode {
-            return ingestRaw(event, profile: profile)
-        }
+        if rawMode { return ingestRaw(event, profile: profile) }
 
         var output: [GestureEmission] = []
         let settings = profile.settings
         let wasPressed = pressedAt[event.input] != nil
 
         if event.isPressed && !wasPressed {
-            // A released single waiting for a possible double-press must be
-            // completed before an unrelated chord begins.
-            if let pending = pendingPress,
-               pending.waitsForDouble,
-               pressedAt.isEmpty,
-               pending.inputs != [event.input] {
-                output.append(emission(for: pending, gesture: .press, timestamp: event.timestamp))
-                pendingPress = nil
+            if pressedAt.isEmpty {
+                suppressUntilAllReleased = false
+                releasedSessionChord = nil
             }
 
             pressedAt[event.input] = event.timestamp
             let chord = Set(pressedAt.keys)
 
-            // Expanding a chord cancels the smaller pending action. This is the
-            // core no-leak rule: A never fires underneath A+LT, and A+LT never
-            // fires underneath A+LT+RB, regardless of how many controls exist.
-            if let pending = pendingPress, pending.inputs != chord {
+            if suppressUntilAllReleased {
+                return output
+            }
+
+            if let pending = pendingPress, pending.waitsForDouble {
+                if chord.isSubset(of: pending.inputs), chord != pending.inputs {
+                    beginActiveChord(chord, primaryInput: event.input, timestamp: event.timestamp, settings: settings)
+                    return output
+                }
+                if !chord.isSubset(of: pending.inputs) {
+                    output.append(emission(for: pending, gesture: .press, timestamp: event.timestamp))
+                    pendingPress = nil
+                }
+            } else if let pending = pendingPress, pending.inputs != chord {
                 pendingPress = nil
             }
 
             beginActiveChord(chord, primaryInput: event.input, timestamp: event.timestamp, settings: settings)
 
-            let supportsDouble = profile.hasBinding(
-                inputs: chord,
-                gesture: .doublePress,
-                pointerMode: pointerMode
-            )
+            let supportsDouble = profile.hasBinding(inputs: chord, gesture: .doublePress, pointerMode: pointerMode)
             let isDouble = supportsDouble &&
                 lastReleasedChord == chord &&
                 event.timestamp - (lastReleaseAt ?? -.infinity) <= settings.doublePressWindow
@@ -90,12 +93,7 @@ public struct GestureEngine: Sendable {
                 return output
             }
 
-            let hasPress = profile.hasBinding(inputs: chord, gesture: .press, pointerMode: pointerMode)
-            let hasLargerChord = profile.hasStrictSuperset(of: chord, pointerMode: pointerMode)
-
-            guard hasPress else {
-                // The chord may still be a prefix of a larger mapping. Nothing
-                // fires until an exact configured set is reached.
+            guard profile.hasBinding(inputs: chord, gesture: .press, pointerMode: pointerMode) else {
                 return output
             }
 
@@ -107,10 +105,7 @@ public struct GestureEngine: Sendable {
                     deadline: event.timestamp + settings.doublePressWindow,
                     waitsForDouble: true
                 )
-            } else if hasLargerChord {
-                // Wait until release or expansion. There is deliberately no
-                // timeout: a slow deliberate larger combination must not leak
-                // the smaller action first.
+            } else if profile.hasStrictSuperset(of: chord, pointerMode: pointerMode, gesture: .press) {
                 pendingPress = PendingPress(
                     inputs: chord,
                     primaryInput: event.input,
@@ -130,14 +125,20 @@ public struct GestureEngine: Sendable {
         } else if !event.isPressed && wasPressed {
             let chordBeforeRelease = Set(pressedAt.keys)
 
-            if let pending = pendingPress, pending.inputs == chordBeforeRelease {
-                if !pending.waitsForDouble {
-                    output.append(emission(for: pending, gesture: .press, timestamp: event.timestamp))
-                    activePressEmittedChord = chordBeforeRelease
-                    pendingPress = nil
+            if suppressUntilAllReleased {
+                pressedAt.removeValue(forKey: event.input)
+                if pressedAt.isEmpty {
+                    finishSuppressedSession(at: event.timestamp)
                 }
-                // Double-press singles remain pending until their deadline so
-                // the second press can replace them with one double action.
+                return output
+            }
+
+            if let pending = pendingPress,
+               pending.inputs == chordBeforeRelease,
+               !pending.waitsForDouble {
+                output.append(emission(for: pending, gesture: .press, timestamp: event.timestamp))
+                activePressEmittedChord = chordBeforeRelease
+                pendingPress = nil
             }
 
             output.append(GestureEmission(
@@ -148,22 +149,16 @@ public struct GestureEngine: Sendable {
             ))
 
             pressedAt.removeValue(forKey: event.input)
-            lastReleasedChord = chordBeforeRelease
-            lastReleaseAt = event.timestamp
-
             let remaining = Set(pressedAt.keys)
+
             if remaining.isEmpty {
+                lastReleasedChord = chordBeforeRelease
+                lastReleaseAt = event.timestamp
                 clearActiveChord()
             } else {
-                // Releasing part of a combination does not synthesize a press
-                // for the smaller remaining set.
-                beginActiveChord(
-                    remaining,
-                    primaryInput: activePrimary ?? remaining.first ?? event.input,
-                    timestamp: event.timestamp,
-                    settings: settings
-                )
-                activePressEmittedChord = nil
+                suppressUntilAllReleased = true
+                releasedSessionChord = chordBeforeRelease
+                clearActiveChord()
             }
         }
 
@@ -176,9 +171,7 @@ public struct GestureEngine: Sendable {
         pointerMode: Bool = false,
         rawMode: Bool = false
     ) -> [GestureEmission] {
-        if rawMode {
-            return tickRaw(at: timestamp, profile: profile)
-        }
+        if rawMode { return tickRaw(at: timestamp, profile: profile) }
 
         var output: [GestureEmission] = []
         let settings = profile.settings
@@ -187,13 +180,13 @@ public struct GestureEngine: Sendable {
            let deadline = pending.deadline,
            timestamp >= deadline {
             output.append(emission(for: pending, gesture: .press, timestamp: deadline))
-            if activeChord == pending.inputs {
-                activePressEmittedChord = pending.inputs
-            }
+            if activeChord == pending.inputs { activePressEmittedChord = pending.inputs }
             pendingPress = nil
         }
 
-        guard !activeChord.isEmpty, let primary = activePrimary else { return output }
+        guard !suppressUntilAllReleased,
+              !activeChord.isEmpty,
+              let primary = activePrimary else { return output }
 
         if !activeHoldEmitted,
            timestamp - activeChordStartedAt >= settings.holdDelay,
@@ -209,17 +202,10 @@ public struct GestureEngine: Sendable {
 
         if timestamp >= activeNextRepeatAt {
             activeNextRepeatAt = timestamp + settings.repeatRate
-            let hasExplicitRepeat = profile.hasBinding(
-                inputs: activeChord,
-                gesture: .repeatPress,
-                pointerMode: pointerMode
-            )
-            let mayRepeatPress = activePressEmittedChord == activeChord && profile.hasBinding(
-                inputs: activeChord,
-                gesture: .press,
-                pointerMode: pointerMode
-            )
-            if hasExplicitRepeat || mayRepeatPress {
+            let explicitRepeat = profile.hasBinding(inputs: activeChord, gesture: .repeatPress, pointerMode: pointerMode)
+            let repeatPress = activePressEmittedChord == activeChord &&
+                profile.hasBinding(inputs: activeChord, gesture: .press, pointerMode: pointerMode)
+            if explicitRepeat || repeatPress {
                 output.append(GestureEmission(
                     inputs: activeChord,
                     primaryInput: primary,
@@ -236,6 +222,8 @@ public struct GestureEngine: Sendable {
         rawStates.removeAll()
         pressedAt.removeAll()
         pendingPress = nil
+        suppressUntilAllReleased = false
+        releasedSessionChord = nil
         lastReleasedChord = nil
         lastReleaseAt = nil
         clearActiveChord()
@@ -264,11 +252,17 @@ public struct GestureEngine: Sendable {
         activePressEmittedChord = nil
     }
 
-    private func emission(
-        for pending: PendingPress,
-        gesture: BindingGesture,
-        timestamp: TimeInterval
-    ) -> GestureEmission {
+    private mutating func finishSuppressedSession(at timestamp: TimeInterval) {
+        if let releasedSessionChord {
+            lastReleasedChord = releasedSessionChord
+            lastReleaseAt = timestamp
+        }
+        suppressUntilAllReleased = false
+        releasedSessionChord = nil
+        clearActiveChord()
+    }
+
+    private func emission(for pending: PendingPress, gesture: BindingGesture, timestamp: TimeInterval) -> GestureEmission {
         GestureEmission(
             inputs: pending.inputs,
             primaryInput: pending.primaryInput,
@@ -277,12 +271,7 @@ public struct GestureEngine: Sendable {
         )
     }
 
-    // Helper UI and the on-screen controller keyboard need immediate raw
-    // per-control events rather than user profile chord disambiguation.
-    private mutating func ingestRaw(
-        _ event: ControllerEvent,
-        profile: ControllerProfile
-    ) -> [GestureEmission] {
+    private mutating func ingestRaw(_ event: ControllerEvent, profile: ControllerProfile) -> [GestureEmission] {
         var state = rawStates[event.input] ?? RawState()
         var output: [GestureEmission] = []
         let settings = profile.settings
@@ -314,10 +303,7 @@ public struct GestureEngine: Sendable {
         return output
     }
 
-    private mutating func tickRaw(
-        at timestamp: TimeInterval,
-        profile: ControllerProfile
-    ) -> [GestureEmission] {
+    private mutating func tickRaw(at timestamp: TimeInterval, profile: ControllerProfile) -> [GestureEmission] {
         var output: [GestureEmission] = []
         let settings = profile.settings
 
@@ -346,7 +332,6 @@ public struct GestureEngine: Sendable {
 public struct BindingResolver: Sendable {
     public init() {}
 
-    /// Legacy helper used only by old UI code. Runtime routing uses exact input sets.
     public func activeLayer(heldInputs: Set<XboxInput>, pointerMode: Bool) -> MappingLayer {
         if pointerMode { return .pointer }
         let lt = heldInputs.contains(.leftTrigger)
@@ -389,23 +374,16 @@ public struct BindingResolver: Sendable {
             }
         }
 
-        let exact = BindingKey(
-            inputs: emission.inputs,
-            pointerMode: pointerMode,
-            gesture: emission.gesture
-        )
-        if let action = profile.action(for: exact) { return action }
+        if let action = profile.action(
+            for: emission.inputs,
+            gesture: emission.gesture,
+            pointerMode: pointerMode
+        ) { return action }
 
         if emission.gesture == .repeatPress {
-            let press = BindingKey(
-                inputs: emission.inputs,
-                pointerMode: pointerMode,
-                gesture: .press
-            )
-            if let action = profile.action(for: press) { return action }
+            return profile.action(for: emission.inputs, gesture: .press, pointerMode: pointerMode)
         }
 
-        // Exact set matching only. No layer or subset fallback is permitted.
         return nil
     }
 }
