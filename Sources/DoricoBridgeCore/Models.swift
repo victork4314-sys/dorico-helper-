@@ -1,6 +1,6 @@
 import Foundation
 
-public enum XboxInput: String, Codable, CaseIterable, Sendable {
+public enum XboxInput: String, Codable, CaseIterable, Hashable, Sendable {
     case buttonA, buttonB, buttonX, buttonY
     case dpadUp, dpadDown, dpadLeft, dpadRight
     case leftBumper, rightBumper, leftTrigger, rightTrigger
@@ -40,7 +40,7 @@ public enum XboxInput: String, Codable, CaseIterable, Sendable {
     }
 }
 
-public enum BindingGesture: String, Codable, CaseIterable, Sendable {
+public enum BindingGesture: String, Codable, CaseIterable, Hashable, Sendable {
     case press
     case release
     case hold
@@ -58,7 +58,9 @@ public enum BindingGesture: String, Codable, CaseIterable, Sendable {
     }
 }
 
-public enum MappingLayer: String, Codable, CaseIterable, Sendable {
+/// Retained for decoding old profiles and for choosing normal versus pointer context.
+/// New mappings are not limited to these predefined modifier layers.
+public enum MappingLayer: String, Codable, CaseIterable, Hashable, Sendable {
     case base
     case leftTrigger
     case rightTrigger
@@ -70,27 +72,121 @@ public enum MappingLayer: String, Codable, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .base: "Base"
-        case .leftTrigger: "Hold LT"
-        case .rightTrigger: "Hold RT"
-        case .bothTriggers: "Hold LT + RT"
-        case .leftBumper: "Hold LB"
-        case .rightBumper: "Hold RB"
-        case .bothBumpers: "Hold LB + RB"
+        case .base: "Normal context"
+        case .leftTrigger: "Legacy: Hold LT"
+        case .rightTrigger: "Legacy: Hold RT"
+        case .bothTriggers: "Legacy: Hold LT + RT"
+        case .leftBumper: "Legacy: Hold LB"
+        case .rightBumper: "Legacy: Hold RB"
+        case .bothBumpers: "Legacy: Hold LB + RB"
         case .pointer: "Pointer mode"
         }
     }
+
+    public var modifierInputs: Set<XboxInput> {
+        switch self {
+        case .base, .pointer: []
+        case .leftTrigger: [.leftTrigger]
+        case .rightTrigger: [.rightTrigger]
+        case .bothTriggers: [.leftTrigger, .rightTrigger]
+        case .leftBumper: [.leftBumper]
+        case .rightBumper: [.rightBumper]
+        case .bothBumpers: [.leftBumper, .rightBumper]
+        }
+    }
+
+    public static let userSelectableCases: [MappingLayer] = [.base, .pointer]
 }
 
+/// An exact, unordered combination of controller inputs.
+/// Extra held controls create a different context and never fall through to a smaller combination.
 public struct BindingKey: Hashable, Codable, Sendable {
-    public var layer: MappingLayer
-    public var input: XboxInput
+    public var inputs: Set<XboxInput>
+    public var pointerMode: Bool
     public var gesture: BindingGesture
 
-    public init(layer: MappingLayer, input: XboxInput, gesture: BindingGesture = .press) {
-        self.layer = layer
-        self.input = input
+    public init(
+        inputs: Set<XboxInput>,
+        pointerMode: Bool = false,
+        gesture: BindingGesture = .press
+    ) {
+        precondition(!inputs.isEmpty, "A controller mapping must contain at least one input")
+        self.inputs = inputs
+        self.pointerMode = pointerMode
         self.gesture = gesture
+    }
+
+    /// Compatibility initializer used by the built-in profile and old call sites.
+    /// The old layer is converted into a real input set immediately.
+    public init(layer: MappingLayer, input: XboxInput, gesture: BindingGesture = .press) {
+        self.inputs = layer.modifierInputs.union([input])
+        self.pointerMode = layer == .pointer
+        self.gesture = gesture
+    }
+
+    public var orderedInputs: [XboxInput] {
+        XboxInput.allCases.filter(inputs.contains)
+    }
+
+    public var displayName: String {
+        let controls = orderedInputs.map(\.displayName).joined(separator: " + ")
+        return pointerMode ? "Pointer mode · \(controls)" : controls
+    }
+
+    public var stableID: String {
+        let controls = orderedInputs.map(\.rawValue).joined(separator: "+")
+        return "\(pointerMode ? "pointer" : "normal").\(controls).\(gesture.rawValue)"
+    }
+
+    /// Legacy compatibility only. Arbitrary combinations should use `inputs` and `displayName`.
+    public var layer: MappingLayer {
+        if pointerMode { return .pointer }
+        if inputs.contains(.leftTrigger), inputs.contains(.rightTrigger) { return .bothTriggers }
+        if inputs.contains(.leftBumper), inputs.contains(.rightBumper) { return .bothBumpers }
+        if inputs.contains(.leftTrigger) { return .leftTrigger }
+        if inputs.contains(.rightTrigger) { return .rightTrigger }
+        if inputs.contains(.leftBumper) { return .leftBumper }
+        if inputs.contains(.rightBumper) { return .rightBumper }
+        return .base
+    }
+
+    /// Legacy compatibility only. It returns a deterministic representative input.
+    public var input: XboxInput {
+        let modifiers = layer.modifierInputs
+        return orderedInputs.first(where: { !modifiers.contains($0) }) ?? orderedInputs.last ?? .buttonA
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case inputs
+        case pointerMode
+        case gesture
+        case layer
+        case input
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let gesture = try container.decodeIfPresent(BindingGesture.self, forKey: .gesture) ?? .press
+
+        if let decodedInputs = try container.decodeIfPresent(Set<XboxInput>.self, forKey: .inputs),
+           !decodedInputs.isEmpty {
+            self.inputs = decodedInputs
+            self.pointerMode = try container.decodeIfPresent(Bool.self, forKey: .pointerMode) ?? false
+            self.gesture = gesture
+            return
+        }
+
+        // Automatic migration for profiles saved by the old layer/input format.
+        let legacyLayer = try container.decodeIfPresent(MappingLayer.self, forKey: .layer) ?? .base
+        let legacyInput = try container.decode(XboxInput.self, forKey: .input)
+        self.init(layer: legacyLayer, input: legacyInput, gesture: gesture)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(inputs, forKey: .inputs)
+        try container.encode(pointerMode, forKey: .pointerMode)
+        try container.encode(gesture, forKey: .gesture)
     }
 }
 
@@ -331,8 +427,32 @@ public struct ControllerProfile: Identifiable, Codable, Hashable, Sendable {
         bindings[key]
     }
 
+    public func action(
+        for inputs: Set<XboxInput>,
+        gesture: BindingGesture,
+        pointerMode: Bool
+    ) -> CommandAction? {
+        bindings[BindingKey(inputs: inputs, pointerMode: pointerMode, gesture: gesture)]
+    }
+
+    public func hasBinding(
+        inputs: Set<XboxInput>,
+        gesture: BindingGesture,
+        pointerMode: Bool
+    ) -> Bool {
+        action(for: inputs, gesture: gesture, pointerMode: pointerMode) != nil
+    }
+
+    public func hasStrictSuperset(of inputs: Set<XboxInput>, pointerMode: Bool) -> Bool {
+        bindings.keys.contains { key in
+            key.pointerMode == pointerMode && inputs.isStrictSubset(of: key.inputs)
+        }
+    }
+
     public func hasBinding(input: XboxInput, gesture: BindingGesture) -> Bool {
-        bindings.keys.contains { $0.input == input && $0.gesture == gesture }
+        bindings.keys.contains {
+            $0.inputs == [input] && !$0.pointerMode && $0.gesture == gesture
+        }
     }
 }
 
@@ -351,13 +471,27 @@ public struct ControllerEvent: Sendable {
 }
 
 public struct GestureEmission: Equatable, Sendable {
-    public var input: XboxInput
+    public var inputs: Set<XboxInput>
+    public var primaryInput: XboxInput
     public var gesture: BindingGesture
     public var timestamp: TimeInterval
 
-    public init(input: XboxInput, gesture: BindingGesture, timestamp: TimeInterval) {
-        self.input = input
+    public var input: XboxInput { primaryInput }
+
+    public init(
+        inputs: Set<XboxInput>,
+        primaryInput: XboxInput,
+        gesture: BindingGesture,
+        timestamp: TimeInterval
+    ) {
+        precondition(!inputs.isEmpty, "A gesture emission must contain at least one input")
+        self.inputs = inputs
+        self.primaryInput = primaryInput
         self.gesture = gesture
         self.timestamp = timestamp
+    }
+
+    public init(input: XboxInput, gesture: BindingGesture, timestamp: TimeInterval) {
+        self.init(inputs: [input], primaryInput: input, gesture: gesture, timestamp: timestamp)
     }
 }
