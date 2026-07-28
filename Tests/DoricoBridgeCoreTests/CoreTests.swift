@@ -83,6 +83,14 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(MIDIAddress.address(for: 511), MIDIAddress(channel: 4, note: 127))
     }
 
+    func testDynamicNoteAddressesAreReservedOutsideMIDILearnCatalog() {
+        let catalogAddresses = Set((0..<512).map(MIDIAddress.address(for:)))
+        XCTAssertFalse(catalogAddresses.contains(BridgeDynamicMIDI.placeSelectedNote))
+        XCTAssertFalse(catalogAddresses.contains(BridgeDynamicMIDI.pitchUp))
+        XCTAssertFalse(catalogAddresses.contains(BridgeDynamicMIDI.pitchDown))
+        XCTAssertTrue(BridgeDynamicMIDI.isReserved(BridgeDynamicMIDI.placeSelectedNote))
+    }
+
     func testProfileRoundTrip() throws {
         let data = try JSONEncoder().encode(DefaultCatalog.legatoStyleProfile)
         let decoded = try JSONDecoder().decode(ControllerProfile.self, from: data)
@@ -98,12 +106,23 @@ final class CoreTests: XCTestCase {
 
     func testDefaultProfileUsesExactLegatoFaceAndStickClickLayout() {
         let profile = DefaultCatalog.legatoStyleProfile
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonA)), DefaultCatalog.action("activate"))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonA)), DefaultCatalog.action("place.note"))
         XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonB)), DefaultCatalog.action("cancel"))
         XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonX)), .controllerText(.ornamentsPopover))
         XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonY)), .internalCommand(.showDashboard))
         XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .leftThumbstickButton)), DefaultCatalog.action("play"))
         XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .rightThumbstickButton)), .pointer(.toggle))
+    }
+
+    func testSimpleActionsAreAvailableWithoutDoricoMenuScan() {
+        let requiredIDs = [
+            "place.note", "delete", "activate", "cancel", "note.input", "play",
+            "undo", "redo", "pitch.up", "pitch.down", "duration.4"
+        ]
+        for id in requiredIDs {
+            XCTAssertNotNil(DefaultCatalog.actionByID[id], "Missing simple mapping action: \(id)")
+            XCTAssertNotEqual(DefaultCatalog.action(id), .none)
+        }
     }
 
     func testUniversalActionCatalogRemainsAvailableForAddMapping() {
