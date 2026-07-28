@@ -7,21 +7,22 @@ public struct GestureEngine: Sendable {
         var nextRepeatAt: TimeInterval = 0
         var holdEmitted = false
         var pendingSingleDeadline: TimeInterval?
+        var pendingBumperDeadline: TimeInterval?
         var lastReleaseAt: TimeInterval?
     }
 
     private var states: [XboxInput: State] = [:]
+    private let bumperComboWindow: TimeInterval = 0.120
 
     public init() {}
 
-    public mutating func ingest(
-        _ event: ControllerEvent,
-        profile: ControllerProfile
-    ) -> [GestureEmission] {
+    public mutating func ingest(_ event: ControllerEvent, profile: ControllerProfile) -> [GestureEmission] {
         var state = states[event.input] ?? State()
         var output: [GestureEmission] = []
         let settings = profile.settings
         let supportsDouble = profile.hasBinding(input: event.input, gesture: .doublePress)
+        let isBumper = event.input == .leftBumper || event.input == .rightBumper
+        let supportsBumperCombo = profile.bindings.keys.contains { $0.layer == .bothBumpers && $0.gesture == .press }
 
         if event.isPressed && !state.isPressed {
             state.isPressed = true
@@ -29,9 +30,18 @@ public struct GestureEngine: Sendable {
             state.nextRepeatAt = event.timestamp + settings.repeatDelay
             state.holdEmitted = false
 
-            if supportsDouble,
-               let lastRelease = state.lastReleaseAt,
-               event.timestamp - lastRelease <= settings.doublePressWindow {
+            if isBumper && supportsBumperCombo {
+                let other: XboxInput = event.input == .leftBumper ? .rightBumper : .leftBumper
+                if var otherState = states[other], otherState.isPressed, otherState.pendingBumperDeadline != nil {
+                    otherState.pendingBumperDeadline = nil
+                    states[other] = otherState
+                    output.append(GestureEmission(input: event.input, gesture: .press, timestamp: event.timestamp))
+                } else {
+                    state.pendingBumperDeadline = event.timestamp + bumperComboWindow
+                }
+            } else if supportsDouble,
+                      let lastRelease = state.lastReleaseAt,
+                      event.timestamp - lastRelease <= settings.doublePressWindow {
                 state.pendingSingleDeadline = nil
                 output.append(GestureEmission(input: event.input, gesture: .doublePress, timestamp: event.timestamp))
             } else if supportsDouble {
@@ -42,6 +52,10 @@ public struct GestureEngine: Sendable {
         } else if !event.isPressed && state.isPressed {
             state.isPressed = false
             state.lastReleaseAt = event.timestamp
+            if state.pendingBumperDeadline != nil {
+                state.pendingBumperDeadline = nil
+                output.append(GestureEmission(input: event.input, gesture: .press, timestamp: event.timestamp))
+            }
             output.append(GestureEmission(input: event.input, gesture: .release, timestamp: event.timestamp))
         }
 
@@ -49,42 +63,37 @@ public struct GestureEngine: Sendable {
         return output
     }
 
-    public mutating func tick(
-        at timestamp: TimeInterval,
-        profile: ControllerProfile
-    ) -> [GestureEmission] {
+    public mutating func tick(at timestamp: TimeInterval, profile: ControllerProfile) -> [GestureEmission] {
         var output: [GestureEmission] = []
         let settings = profile.settings
 
         for input in states.keys {
             guard var state = states[input] else { continue }
 
+            if let deadline = state.pendingBumperDeadline, timestamp >= deadline {
+                state.pendingBumperDeadline = nil
+                output.append(GestureEmission(input: input, gesture: .press, timestamp: deadline))
+            }
             if let deadline = state.pendingSingleDeadline, timestamp >= deadline {
                 state.pendingSingleDeadline = nil
                 output.append(GestureEmission(input: input, gesture: .press, timestamp: deadline))
             }
-
             if state.isPressed {
                 if !state.holdEmitted, timestamp - state.pressedAt >= settings.holdDelay {
                     state.holdEmitted = true
                     output.append(GestureEmission(input: input, gesture: .hold, timestamp: timestamp))
                 }
-
-                if timestamp >= state.nextRepeatAt {
+                if state.pendingBumperDeadline == nil, timestamp >= state.nextRepeatAt {
                     state.nextRepeatAt = timestamp + settings.repeatRate
                     output.append(GestureEmission(input: input, gesture: .repeatPress, timestamp: timestamp))
                 }
             }
-
             states[input] = state
         }
-
         return output
     }
 
-    public mutating func reset() {
-        states.removeAll()
-    }
+    public mutating func reset() { states.removeAll() }
 }
 
 public struct BindingResolver: Sendable {
@@ -96,7 +105,6 @@ public struct BindingResolver: Sendable {
         let rt = heldInputs.contains(.rightTrigger)
         let lb = heldInputs.contains(.leftBumper)
         let rb = heldInputs.contains(.rightBumper)
-
         if lt && rt { return .bothTriggers }
         if lb && rb { return .bothBumpers }
         if lt { return .leftTrigger }
@@ -115,51 +123,41 @@ public struct BindingResolver: Sendable {
     ) -> CommandAction? {
         if helperUIActive {
             switch emission.input {
-            case .buttonB where emission.gesture == .press:
-                return .internalCommand(.helperBack)
-            case .buttonA where emission.gesture == .press:
-                return .internalCommand(.helperActivate)
+            case .buttonB where emission.gesture == .press: return .internalCommand(.helperBack)
+            case .buttonA where emission.gesture == .press: return .internalCommand(.helperActivate)
             case .view where emission.gesture == .press,
-                 .guide where emission.gesture == .press:
-                return .internalCommand(.toggleDashboard)
+                 .guide where emission.gesture == .press: return .internalCommand(.toggleDashboard)
             case .dpadUp where emission.gesture == .press || emission.gesture == .repeatPress,
-                 .leftStickUp where emission.gesture == .press || emission.gesture == .repeatPress:
-                return .internalCommand(.helperUp)
+                 .leftStickUp where emission.gesture == .press || emission.gesture == .repeatPress: return .internalCommand(.helperUp)
             case .dpadDown where emission.gesture == .press || emission.gesture == .repeatPress,
-                 .leftStickDown where emission.gesture == .press || emission.gesture == .repeatPress:
-                return .internalCommand(.helperDown)
+                 .leftStickDown where emission.gesture == .press || emission.gesture == .repeatPress: return .internalCommand(.helperDown)
             case .dpadLeft where emission.gesture == .press || emission.gesture == .repeatPress,
-                 .leftStickLeft where emission.gesture == .press || emission.gesture == .repeatPress:
-                return .internalCommand(.helperLeft)
+                 .leftStickLeft where emission.gesture == .press || emission.gesture == .repeatPress: return .internalCommand(.helperLeft)
             case .dpadRight where emission.gesture == .press || emission.gesture == .repeatPress,
-                 .leftStickRight where emission.gesture == .press || emission.gesture == .repeatPress:
-                return .internalCommand(.helperRight)
-            case .leftBumper where emission.gesture == .press || emission.gesture == .repeatPress:
-                return .internalCommand(.helperDecrease)
-            case .rightBumper where emission.gesture == .press || emission.gesture == .repeatPress:
-                return .internalCommand(.helperIncrease)
-            default:
-                return nil
+                 .leftStickRight where emission.gesture == .press || emission.gesture == .repeatPress: return .internalCommand(.helperRight)
+            case .leftBumper where emission.gesture == .press || emission.gesture == .repeatPress: return .internalCommand(.helperDecrease)
+            case .rightBumper where emission.gesture == .press || emission.gesture == .repeatPress: return .internalCommand(.helperIncrease)
+            default: return nil
             }
         }
 
-        let layer = activeLayer(heldInputs: heldInputs, pointerMode: pointerMode)
+        let bothBumpers = heldInputs.contains(.leftBumper) && heldInputs.contains(.rightBumper)
+        let layer: MappingLayer
+        if bothBumpers && (emission.input == .leftBumper || emission.input == .rightBumper) {
+            layer = .bothBumpers
+        } else {
+            // A modifier's own standalone press belongs to Base. Other inputs
+            // pressed while that modifier is held belong to the modifier layer.
+            layer = activeLayer(heldInputs: heldInputs.subtracting([emission.input]), pointerMode: pointerMode)
+        }
+
         let exact = BindingKey(layer: layer, input: emission.input, gesture: emission.gesture)
         if let action = profile.action(for: exact) { return action }
-
         if emission.gesture == .repeatPress {
             let press = BindingKey(layer: layer, input: emission.input, gesture: .press)
             if let action = profile.action(for: press) { return action }
         }
-
-        if layer != .base {
-            let fallback = BindingKey(layer: .base, input: emission.input, gesture: emission.gesture)
-            if let action = profile.action(for: fallback) { return action }
-            if emission.gesture == .repeatPress {
-                return profile.action(for: BindingKey(layer: .base, input: emission.input, gesture: .press))
-            }
-        }
-
+        // No base fallback: an unmapped combination does nothing.
         return nil
     }
 }
