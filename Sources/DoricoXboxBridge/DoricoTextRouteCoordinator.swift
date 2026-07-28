@@ -1,4 +1,5 @@
 #if os(macOS)
+import Combine
 import Foundation
 import DoricoBridgeCore
 
@@ -8,11 +9,13 @@ final class DoricoTextRouteCoordinator {
 
     private var pendingRoute: DoricoTextRoute?
     private var openingRoutedKeyboard = false
+    private var keyboardObservation: AnyCancellable?
 
     private init() {}
 
     func begin(_ route: DoricoTextRoute, model: AppModel) {
         pendingRoute = route
+        observeKeyboardIfNeeded(model: model)
         openingRoutedKeyboard = true
         model.showDashboard()
         model.openControllerKeyboard(.typeIntoDorico)
@@ -33,6 +36,26 @@ final class DoricoTextRouteCoordinator {
         guard let route = pendingRoute else { return nil }
         pendingRoute = nil
         return action(for: route, text: text)
+    }
+
+    private func observeKeyboardIfNeeded(model: AppModel) {
+        guard keyboardObservation == nil else { return }
+        keyboardObservation = model.controllerKeyboard.$isVisible
+            .dropFirst()
+            .sink { [weak self, weak model] visible in
+                guard !visible else { return }
+                DispatchQueue.main.async {
+                    guard let self, let model else { return }
+                    // Submission sets dashboardVisible to false before hiding the
+                    // app. Cancel/back leaves the dashboard visible. This keeps a
+                    // submitted route alive exactly long enough to be consumed,
+                    // while clearing every cancellation path, including View and
+                    // controller disconnect/reset.
+                    if model.dashboardVisible && !model.controllerKeyboard.isVisible {
+                        self.cancel()
+                    }
+                }
+            }
     }
 
     private func action(for route: DoricoTextRoute, text: String) -> CommandAction {
