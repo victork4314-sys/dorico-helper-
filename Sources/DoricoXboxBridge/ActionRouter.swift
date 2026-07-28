@@ -42,7 +42,24 @@ final class ActionRouter {
             performPointer(operation)
         case .midiPulse(let address):
             guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
-            midi.sendPulse(address)
+            if address == BridgeDynamicMIDI.placeSelectedNote {
+                let selected = NoteEntryState.shared
+                midi.sendPulse(selected.midiAddress)
+                model?.lastAction = "Place note \(selected.displayName)"
+                model?.log("Placed selected note \(selected.displayName)")
+            } else if address == BridgeDynamicMIDI.pitchUp {
+                NoteEntryState.shared.move(1)
+                KeyEmitter.send(KeyChord("up"))
+                model?.lastAction = "Pitch up to \(NoteEntryState.shared.displayName)"
+                await refreshFocusSelectorAfterDoricoAction()
+            } else if address == BridgeDynamicMIDI.pitchDown {
+                NoteEntryState.shared.move(-1)
+                KeyEmitter.send(KeyChord("down"))
+                model?.lastAction = "Pitch down to \(NoteEntryState.shared.displayName)"
+                await refreshFocusSelectorAfterDoricoAction()
+            } else {
+                midi.sendPulse(address)
+            }
         case .keyChord(let chord):
             guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
             KeyEmitter.send(chord)
