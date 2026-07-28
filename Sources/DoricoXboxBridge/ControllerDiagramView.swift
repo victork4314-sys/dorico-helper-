@@ -6,15 +6,16 @@ import DoricoBridgeCore
 struct ControllerDiagramView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var noteEntry = NoteEntryState.shared
-    var selectInput: (XboxInput) -> Void
+    @Binding var selectedInputs: Set<XboxInput>
+    var mapSelection: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Controller mapping")
+                    Text("Controller combination mapping")
                         .font(.headline)
-                    Text("Click any control, then choose its action. Editing only “\(model.activeProfileName)”.")
+                    Text("Select any number of controls, then map that exact combination. Editing only “\(model.activeProfileName)”.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -26,6 +27,20 @@ struct ControllerDiagramView: View {
                     Text(noteEntry.displayName)
                         .font(.title3.monospacedDigit().weight(.semibold))
                 }
+            }
+
+            HStack(spacing: 10) {
+                Button("Map selected combination") { mapSelection() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedInputs.isEmpty)
+                Button("Clear selection") { selectedInputs.removeAll() }
+                    .disabled(selectedInputs.isEmpty)
+                Button("Select every control") { selectedInputs = Set(XboxInput.allCases) }
+                Spacer()
+                Text(selectionDescription)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(selectedInputs.isEmpty ? Color.secondary : Color.accentColor)
+                    .lineLimit(2)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -68,9 +83,10 @@ struct ControllerDiagramView: View {
             }
 
             HStack(spacing: 16) {
-                Label("A places \(noteEntry.displayName)", systemImage: "music.note")
-                Label("Up/Down changes pitch", systemImage: "arrow.up.arrow.down")
-                Label("Only the active layout runs", systemImage: "checkmark.shield")
+                Label("One control or every control", systemImage: "square.stack.3d.up")
+                Label("Order does not matter", systemImage: "arrow.triangle.swap")
+                Label("Exact match—no smaller action leakage", systemImage: "checkmark.shield")
+                Label("Only the active layout runs", systemImage: "rectangle.stack.fill")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -82,6 +98,22 @@ struct ControllerDiagramView: View {
                 .stroke(Color(nsColor: .separatorColor))
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var selectionDescription: String {
+        guard !selectedInputs.isEmpty else { return "No controls selected" }
+        return XboxInput.allCases
+            .filter(selectedInputs.contains)
+            .map(\.displayName)
+            .joined(separator: " + ")
+    }
+
+    private func toggle(_ input: XboxInput) {
+        if selectedInputs.contains(input) {
+            selectedInputs.remove(input)
+        } else {
+            selectedInputs.insert(input)
+        }
     }
 
     private func shoulder(_ input: XboxInput, _ label: String, x: CGFloat, y: CGFloat) -> some View {
@@ -152,23 +184,35 @@ struct ControllerDiagramView: View {
         height: CGFloat,
         cornerRadius: CGFloat
     ) -> some View {
-        let action = model.mappedAction(for: input, layer: model.selectedLayer, gesture: model.selectedGesture)
+        let selected = selectedInputs.contains(input)
+        let singleAction = model.mappedAction(
+            for: [input],
+            pointerMode: model.selectedLayer == .pointer,
+            gesture: model.selectedGesture
+        )
         return Button {
-            selectInput(input)
+            toggle(input)
         } label: {
             Text(label)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .frame(width: width, height: height)
-                .background(action == nil ? Color.secondary.opacity(0.16) : Color.accentColor.opacity(0.24))
+                .background(
+                    selected
+                        ? Color.accentColor.opacity(0.42)
+                        : (singleAction == nil ? Color.secondary.opacity(0.16) : Color.accentColor.opacity(0.16))
+                )
                 .overlay {
                     RoundedRectangle(cornerRadius: cornerRadius)
-                        .stroke(action == nil ? Color.secondary.opacity(0.45) : Color.accentColor, lineWidth: action == nil ? 1 : 2)
+                        .stroke(
+                            selected ? Color.accentColor : (singleAction == nil ? Color.secondary.opacity(0.45) : Color.accentColor),
+                            lineWidth: selected ? 3 : (singleAction == nil ? 1 : 2)
+                        )
                 }
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         }
         .buttonStyle(.plain)
-        .help("\(input.displayName): \(action?.summary ?? "Unmapped")")
-        .accessibilityLabel("\(input.displayName). \(action?.summary ?? "Unmapped"). Press to choose an action.")
+        .help("\(input.displayName): \(selected ? "selected for combination" : (singleAction?.summary ?? "not selected"))")
+        .accessibilityLabel("\(input.displayName). \(selected ? "Selected for the combination" : "Not selected"). Press to toggle.")
     }
 }
 #endif
