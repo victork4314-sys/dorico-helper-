@@ -1,0 +1,73 @@
+import XCTest
+@testable import DoricoBridgeCore
+
+final class CoreTests: XCTestCase {
+    func testLayerPrecedence() {
+        let resolver = BindingResolver()
+        XCTAssertEqual(resolver.activeLayer(heldInputs: [.leftTrigger], pointerMode: false), .leftTrigger)
+        XCTAssertEqual(resolver.activeLayer(heldInputs: [.leftTrigger, .rightTrigger], pointerMode: false), .bothTriggers)
+        XCTAssertEqual(resolver.activeLayer(heldInputs: [.leftBumper, .rightBumper], pointerMode: false), .bothBumpers)
+        XCTAssertEqual(resolver.activeLayer(heldInputs: [.leftTrigger, .rightTrigger], pointerMode: true), .pointer)
+    }
+
+    func testBIsAlwaysBackInsideHelper() {
+        let resolver = BindingResolver()
+        let emission = GestureEmission(input: .buttonB, gesture: .press, timestamp: 1)
+        let action = resolver.resolve(
+            emission: emission,
+            heldInputs: [],
+            pointerMode: false,
+            helperUIActive: true,
+            profile: DefaultCatalog.legatoStyleProfile
+        )
+        XCTAssertEqual(action, .internalCommand(.helperBack))
+    }
+
+    func testRepeatFallsBackToPressBinding() {
+        let resolver = BindingResolver()
+        let emission = GestureEmission(input: .dpadRight, gesture: .repeatPress, timestamp: 1)
+        let action = resolver.resolve(
+            emission: emission,
+            heldInputs: [],
+            pointerMode: false,
+            helperUIActive: false,
+            profile: DefaultCatalog.legatoStyleProfile
+        )
+        XCTAssertEqual(action, .keyChord(KeyChord("right")))
+    }
+
+    func testDoublePressDefersSinglePress() {
+        var profile = DefaultCatalog.legatoStyleProfile
+        profile.bindings[BindingKey(layer: .base, input: .buttonA, gesture: .doublePress)] = .internalCommand(.showDashboard)
+        var engine = GestureEngine()
+
+        XCTAssertTrue(engine.ingest(ControllerEvent(input: .buttonA, isPressed: true, timestamp: 0), profile: profile).isEmpty)
+        _ = engine.ingest(ControllerEvent(input: .buttonA, isPressed: false, timestamp: 0.05), profile: profile)
+        let second = engine.ingest(ControllerEvent(input: .buttonA, isPressed: true, timestamp: 0.15), profile: profile)
+        XCTAssertEqual(second.map(\.gesture), [.doublePress])
+    }
+
+    func testSinglePressEmitsAfterDoubleWindow() {
+        var profile = DefaultCatalog.legatoStyleProfile
+        profile.bindings[BindingKey(layer: .base, input: .buttonA, gesture: .doublePress)] = .internalCommand(.showDashboard)
+        var engine = GestureEngine()
+        _ = engine.ingest(ControllerEvent(input: .buttonA, isPressed: true, timestamp: 0), profile: profile)
+        _ = engine.ingest(ControllerEvent(input: .buttonA, isPressed: false, timestamp: 0.05), profile: profile)
+        let emissions = engine.tick(at: 0.30, profile: profile)
+        XCTAssertEqual(emissions.map(\.gesture), [.press])
+    }
+
+    func testMIDIAddressUsesAllChannels() {
+        XCTAssertEqual(MIDIAddress.address(for: 0), MIDIAddress(channel: 1, note: 0))
+        XCTAssertEqual(MIDIAddress.address(for: 127), MIDIAddress(channel: 1, note: 127))
+        XCTAssertEqual(MIDIAddress.address(for: 128), MIDIAddress(channel: 2, note: 0))
+        XCTAssertEqual(MIDIAddress.address(for: 511), MIDIAddress(channel: 4, note: 127))
+    }
+
+    func testProfileRoundTrip() throws {
+        let data = try JSONEncoder().encode(DefaultCatalog.legatoStyleProfile)
+        let decoded = try JSONDecoder().decode(ControllerProfile.self, from: data)
+        XCTAssertEqual(decoded.name, DefaultCatalog.legatoStyleProfile.name)
+        XCTAssertEqual(decoded.bindings.count, DefaultCatalog.legatoStyleProfile.bindings.count)
+    }
+}
