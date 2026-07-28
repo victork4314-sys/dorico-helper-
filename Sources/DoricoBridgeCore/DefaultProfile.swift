@@ -7,11 +7,9 @@ public enum DefaultCatalog {
             list.append(ActionDescriptor(id: id, title: title, category: category, detail: detail, action: action, repeatable: repeatable))
         }
 
-        // Simple actions are intentionally listed first so users do not have
-        // to search Dorico's full command catalog for everyday controls.
-        add("place.note", "Place selected note", "Simple actions", "Enter the pitch selected with Up/Down at Dorico's note-input caret", .midiPulse(BridgeDynamicMIDI.placeSelectedNote))
-        add("pitch.up", "Move note pitch up", "Simple actions", "Move the Dorico note-input caret and the bridge pitch up one diatonic step", .midiPulse(BridgeDynamicMIDI.pitchUp), repeatable: true)
-        add("pitch.down", "Move note pitch down", "Simple actions", "Move the Dorico note-input caret and the bridge pitch down one diatonic step", .midiPulse(BridgeDynamicMIDI.pitchDown), repeatable: true)
+        add("place.note", "Place selected note", "Simple actions", "Enter the selected named pitch at Dorico's note-input caret", .midiPulse(BridgeDynamicMIDI.placeSelectedNote))
+        add("pitch.up", "Move note pitch up", "Simple actions", "Move the note-input caret and selected pitch up one diatonic step", .midiPulse(BridgeDynamicMIDI.pitchUp), repeatable: true)
+        add("pitch.down", "Move note pitch down", "Simple actions", "Move the note-input caret and selected pitch down one diatonic step", .midiPulse(BridgeDynamicMIDI.pitchDown), repeatable: true)
         add("delete", "Delete selection", "Simple actions", "Delete the current Dorico note, object, or selection", .keyChord(KeyChord("delete")))
         add("activate", "Confirm / Return", "Simple actions", "Confirm the active Dorico popover, field, or dialog", .keyChord(KeyChord("return")))
         add("cancel", "Cancel / close", "Simple actions", "Close the active popover, dialog, or mode", .keyChord(KeyChord("escape")))
@@ -28,10 +26,10 @@ public enum DefaultCatalog {
         add("navigate.right", "Move selection right", "Navigation", "Dorico selection navigation", .keyChord(KeyChord("right")), repeatable: true)
         add("navigate.up", "Move selection up", "Navigation", "Dorico selection navigation", .keyChord(KeyChord("up")), repeatable: true)
         add("navigate.down", "Move selection down", "Navigation", "Dorico selection navigation", .keyChord(KeyChord("down")), repeatable: true)
-        add("select.left", "Extend selection left", "Selection", "Legato LT + Left", .keyChord(KeyChord("left", modifiers: [.shift])), repeatable: true)
-        add("select.right", "Extend selection right", "Selection", "Legato LT + Right", .keyChord(KeyChord("right", modifiers: [.shift])), repeatable: true)
-        add("select.up", "Extend selection up", "Selection", "Legato LT + Up", .keyChord(KeyChord("up", modifiers: [.shift])), repeatable: true)
-        add("select.down", "Extend selection down", "Selection", "Legato LT + Down", .keyChord(KeyChord("down", modifiers: [.shift])), repeatable: true)
+        add("select.left", "Extend selection left", "Selection", "Shift-Left", .keyChord(KeyChord("left", modifiers: [.shift])), repeatable: true)
+        add("select.right", "Extend selection right", "Selection", "Shift-Right", .keyChord(KeyChord("right", modifiers: [.shift])), repeatable: true)
+        add("select.up", "Extend selection up", "Selection", "Shift-Up", .keyChord(KeyChord("up", modifiers: [.shift])), repeatable: true)
+        add("select.down", "Extend selection down", "Selection", "Shift-Down", .keyChord(KeyChord("down", modifiers: [.shift])), repeatable: true)
 
         add("duration.16", "16th note", "Simple durations", "Dorico duration 4", .keyChord(KeyChord("4")))
         add("duration.8", "Eighth note", "Simple durations", "Dorico duration 5", .keyChord(KeyChord("5")))
@@ -57,32 +55,38 @@ public enum DefaultCatalog {
         add("access.focus.right", "Accessibility focus right", "Universal access", "Move to nearest accessible control on the right", .accessibility(.move(.right)), repeatable: true)
         add("access.focus.up", "Accessibility focus up", "Universal access", "Move to nearest accessible control above", .accessibility(.move(.up)), repeatable: true)
         add("access.focus.down", "Accessibility focus down", "Universal access", "Move to nearest accessible control below", .accessibility(.move(.down)), repeatable: true)
-        add("access.scan.next", "Next accessible zone", "Legato zones", "Legato RB: next reachable Dorico zone", .accessibility(.scanNext), repeatable: true)
-        add("access.scan.previous", "Previous accessible zone", "Legato zones", "Legato LB: previous reachable Dorico zone", .accessibility(.scanPrevious), repeatable: true)
+        add("access.scan.next", "Next accessible zone", "Legato zones", "Next reachable Dorico zone", .accessibility(.scanNext), repeatable: true)
+        add("access.scan.previous", "Previous accessible zone", "Legato zones", "Previous reachable Dorico zone", .accessibility(.scanPrevious), repeatable: true)
         add("access.press", "Press accessible control", "Universal access", "Press the focused Dorico control", .accessibility(.pressFocused))
         add("access.increment", "Increase accessible value", "Universal access", "Increase focused value", .accessibility(.incrementFocused), repeatable: true)
         add("access.decrement", "Decrease accessible value", "Universal access", "Decrease focused value", .accessibility(.decrementFocused), repeatable: true)
         add("access.menu", "Show focused control menu", "Universal access", "Open the focused control menu", .accessibility(.showFocusedMenu))
 
-        add("pointer.toggle", "Toggle pointer mode", "Pointer", "Legato right-stick click", .pointer(.toggle))
+        add("pointer.toggle", "Toggle pointer mode", "Pointer", "Turn controller pointer mode on or off", .pointer(.toggle))
         add("pointer.click", "Pointer click", "Pointer", "Left-click", .pointer(.leftClick))
         add("pointer.double", "Pointer double-click", "Pointer", "Double-click", .pointer(.doubleClick))
         add("pointer.right", "Pointer right-click", "Pointer", "Right-click", .pointer(.rightClick))
-        add("pointer.scroll.up", "Scroll up", "Pointer", "Right-stick scroll", .pointer(.scroll(dx: 0, dy: 4)), repeatable: true)
-        add("pointer.scroll.down", "Scroll down", "Pointer", "Right-stick scroll", .pointer(.scroll(dx: 0, dy: -4)), repeatable: true)
-        add("pointer.scroll.left", "Scroll left", "Pointer", "Right-stick scroll", .pointer(.scroll(dx: -4, dy: 0)), repeatable: true)
-        add("pointer.scroll.right", "Scroll right", "Pointer", "Right-stick scroll", .pointer(.scroll(dx: 4, dy: 0)), repeatable: true)
-        add("bridge.dashboard", "Open Legato command area", "Bridge", "Legato Y or Menu opens the controller dashboard", .internalCommand(.showDashboard))
-        add("bridge.toggle", "Toggle bridge dashboard", "Bridge", "Open or close dashboard", .internalCommand(.toggleDashboard))
+        add("pointer.scroll.up", "Scroll up", "Pointer", "Scroll upward", .pointer(.scroll(dx: 0, dy: 4)), repeatable: true)
+        add("pointer.scroll.down", "Scroll down", "Pointer", "Scroll downward", .pointer(.scroll(dx: 0, dy: -4)), repeatable: true)
+        add("pointer.scroll.left", "Scroll left", "Pointer", "Scroll left", .pointer(.scroll(dx: -4, dy: 0)), repeatable: true)
+        add("pointer.scroll.right", "Scroll right", "Pointer", "Scroll right", .pointer(.scroll(dx: 4, dy: 0)), repeatable: true)
+        add("bridge.dashboard", "Open Legato command area", "Bridge", "Open the controller dashboard", .internalCommand(.showDashboard))
+        add("bridge.toggle", "Toggle bridge dashboard", "Bridge", "Open or close the dashboard", .internalCommand(.toggleDashboard))
 
         for index in 0..<512 {
             let address = MIDIAddress.address(for: index)
-            add("midi.slot.\(index + 1)", "MIDI Learn slot \(index + 1)", "Dorico MIDI Learn", "Virtual MIDI channel \(address.channel), note \(address.note)", .midiPulse(address))
+            add(
+                "midi.slot.\(index + 1)",
+                "MIDI Learn \(address.noteName) · Channel \(address.channel)",
+                "Dorico MIDI Learn",
+                "Virtual MIDI \(address.noteName) on channel \(address.channel)",
+                .midiPulse(address)
+            )
         }
         return list
     }()
 
-    public static let actionByID: [String: ActionDescriptor] = Dictionary(uniqueKeysWithValues: actions.map { ($0.id, $0) })
+    public static let actionByID = Dictionary(uniqueKeysWithValues: actions.map { ($0.id, $0) })
     public static func action(_ id: String) -> CommandAction { actionByID[id]?.action ?? .none }
 
     public static let legatoStyleProfile: ControllerProfile = {
@@ -93,7 +97,6 @@ public enum DefaultCatalog {
             bindings[key] = action(actionID)
         }
 
-        // Legato score entry: A enters the currently selected pitch.
         bind(.base, .buttonA, "place.note")
         bind(.base, .buttonB, "cancel")
         bind(.base, .buttonX, "xbox.popover.ornaments")
@@ -106,8 +109,6 @@ public enum DefaultCatalog {
         bind(.base, .rightThumbstickButton, "pointer.toggle")
         bind(.base, .guide, "bridge.toggle")
 
-        // Left/right move through the score. Up/down move the note-entry pitch,
-        // while the router also sends Dorico its matching caret movement.
         for input in [XboxInput.dpadLeft, .leftStickLeft] { bind(.base, input, "navigate.left") }
         for input in [XboxInput.dpadRight, .leftStickRight] { bind(.base, input, "navigate.right") }
         for input in [XboxInput.dpadUp, .leftStickUp] { bind(.base, input, "pitch.up") }
