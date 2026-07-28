@@ -7,6 +7,23 @@ public enum DefaultCatalog {
             list.append(ActionDescriptor(id: id, title: title, category: category, detail: detail, action: action, repeatable: repeatable))
         }
 
+        // Simple actions are intentionally listed first so users do not have
+        // to search Dorico's full command catalog for everyday controls.
+        add("place.note", "Place selected note", "Simple actions", "Enter the pitch selected with Up/Down at Dorico's note-input caret", .midiPulse(BridgeDynamicMIDI.placeSelectedNote))
+        add("pitch.up", "Move note pitch up", "Simple actions", "Move the Dorico note-input caret and the bridge pitch up one diatonic step", .midiPulse(BridgeDynamicMIDI.pitchUp), repeatable: true)
+        add("pitch.down", "Move note pitch down", "Simple actions", "Move the Dorico note-input caret and the bridge pitch down one diatonic step", .midiPulse(BridgeDynamicMIDI.pitchDown), repeatable: true)
+        add("delete", "Delete selection", "Simple actions", "Delete the current Dorico note, object, or selection", .keyChord(KeyChord("delete")))
+        add("activate", "Confirm / Return", "Simple actions", "Confirm the active Dorico popover, field, or dialog", .keyChord(KeyChord("return")))
+        add("cancel", "Cancel / close", "Simple actions", "Close the active popover, dialog, or mode", .keyChord(KeyChord("escape")))
+        add("note.input", "Start note input", "Simple actions", "Dorico Shift-N", .keyChord(KeyChord("n", modifiers: [.shift])))
+        add("play", "Play / Stop", "Simple actions", "Toggle Dorico playback", .keyChord(KeyChord("space")))
+        add("undo", "Undo", "Simple actions", "Undo the last change", .keyChord(KeyChord("z", modifiers: [.command])))
+        add("redo", "Redo", "Simple actions", "Redo the last undone change", .keyChord(KeyChord("z", modifiers: [.command, .shift])))
+        add("copy", "Copy", "Simple actions", "Copy the current selection", .keyChord(KeyChord("c", modifiers: [.command])))
+        add("cut", "Cut", "Simple actions", "Cut the current selection", .keyChord(KeyChord("x", modifiers: [.command])))
+        add("paste", "Paste", "Simple actions", "Paste", .keyChord(KeyChord("v", modifiers: [.command])))
+        add("select.all", "Select all", "Simple actions", "Select all", .keyChord(KeyChord("a", modifiers: [.command])))
+
         add("navigate.left", "Move selection left", "Navigation", "Dorico selection navigation", .keyChord(KeyChord("left")), repeatable: true)
         add("navigate.right", "Move selection right", "Navigation", "Dorico selection navigation", .keyChord(KeyChord("right")), repeatable: true)
         add("navigate.up", "Move selection up", "Navigation", "Dorico selection navigation", .keyChord(KeyChord("up")), repeatable: true)
@@ -16,27 +33,15 @@ public enum DefaultCatalog {
         add("select.up", "Extend selection up", "Selection", "Legato LT + Up", .keyChord(KeyChord("up", modifiers: [.shift])), repeatable: true)
         add("select.down", "Extend selection down", "Selection", "Legato LT + Down", .keyChord(KeyChord("down", modifiers: [.shift])), repeatable: true)
 
-        add("activate", "Confirm / place", "Legato base", "Legato A: confirm, activate, or place at the Dorico caret", .keyChord(KeyChord("return")))
-        add("cancel", "Cancel / close", "Legato base", "Legato B: close the active popover, dialog, or mode", .keyChord(KeyChord("escape")))
-        add("delete", "Delete selection", "Edit", "Delete the current Dorico selection", .keyChord(KeyChord("delete")))
-        add("play", "Play / Stop", "Playback", "Legato left-stick click", .keyChord(KeyChord("space")))
-        add("undo", "Undo", "Edit", "Legato View button", .keyChord(KeyChord("z", modifiers: [.command])))
-        add("redo", "Redo", "Edit", "Redo", .keyChord(KeyChord("z", modifiers: [.command, .shift])))
-        add("copy", "Copy", "Selection", "Legato LT + A", .keyChord(KeyChord("c", modifiers: [.command])))
-        add("cut", "Cut", "Selection", "Legato LT + B", .keyChord(KeyChord("x", modifiers: [.command])))
-        add("paste", "Paste", "Selection", "Legato LT + X", .keyChord(KeyChord("v", modifiers: [.command])))
-        add("select.all", "Select all", "Selection", "Legato LT + Y", .keyChord(KeyChord("a", modifiers: [.command])))
-        add("note.input", "Start note input", "Write", "Dorico Shift-N", .keyChord(KeyChord("n", modifiers: [.shift])))
+        add("duration.16", "16th note", "Simple durations", "Dorico duration 4", .keyChord(KeyChord("4")))
+        add("duration.8", "Eighth note", "Simple durations", "Dorico duration 5", .keyChord(KeyChord("5")))
+        add("duration.4", "Quarter note", "Simple durations", "Dorico duration 6", .keyChord(KeyChord("6")))
+        add("duration.2", "Half note", "Simple durations", "Dorico duration 7", .keyChord(KeyChord("7")))
+        add("duration.1", "Whole note", "Simple durations", "Dorico duration 8", .keyChord(KeyChord("8")))
+        add("duration.dot", "Rhythm dot", "Simple durations", "Dorico rhythm dot", .keyChord(KeyChord("period")))
+        add("tie", "Tie", "Simple durations", "Dorico tie command", .keyChord(KeyChord("t")))
 
-        add("duration.16", "16th note", "Duration wheel", "Dorico duration 4", .keyChord(KeyChord("4")))
-        add("duration.8", "Eighth note", "Duration wheel", "Dorico duration 5", .keyChord(KeyChord("5")))
-        add("duration.4", "Quarter note", "Duration wheel", "Dorico duration 6", .keyChord(KeyChord("6")))
-        add("duration.2", "Half note", "Duration wheel", "Dorico duration 7", .keyChord(KeyChord("7")))
-        add("duration.1", "Whole note", "Duration wheel", "Dorico duration 8", .keyChord(KeyChord("8")))
-        add("duration.dot", "Rhythm dot", "Duration wheel", "Dorico rhythm dot", .keyChord(KeyChord("period")))
-        add("tie", "Tie", "Duration wheel", "Dorico tie command", .keyChord(KeyChord("t")))
-
-        add("xbox.popover.ornaments", "Ornaments", "Legato base", "Legato X opens controller-written ornaments", .controllerText(.ornamentsPopover))
+        add("xbox.popover.ornaments", "Ornaments", "Popovers", "Open the controller-written ornaments picker", .controllerText(.ornamentsPopover))
         add("xbox.text.focused", "Xbox keyboard for focused Dorico field", "Xbox text entry", "Type into a focused field or open popover", .controllerText(.focusedField))
         add("xbox.jump.commands", "Xbox keyboard for Jump Bar Commands", "Xbox text entry", "Open Jump Bar Commands", .controllerText(.jumpBarCommands))
         add("xbox.jump.goto", "Xbox keyboard for Jump Bar Go To", "Xbox text entry", "Open Jump Bar Go To", .controllerText(.jumpBarGoTo))
@@ -88,7 +93,8 @@ public enum DefaultCatalog {
             bindings[key] = action(actionID)
         }
 
-        bind(.base, .buttonA, "activate")
+        // Legato score entry: A enters the currently selected pitch.
+        bind(.base, .buttonA, "place.note")
         bind(.base, .buttonB, "cancel")
         bind(.base, .buttonX, "xbox.popover.ornaments")
         bind(.base, .buttonY, "bridge.dashboard")
@@ -100,10 +106,12 @@ public enum DefaultCatalog {
         bind(.base, .rightThumbstickButton, "pointer.toggle")
         bind(.base, .guide, "bridge.toggle")
 
+        // Left/right move through the score. Up/down move the note-entry pitch,
+        // while the router also sends Dorico its matching caret movement.
         for input in [XboxInput.dpadLeft, .leftStickLeft] { bind(.base, input, "navigate.left") }
         for input in [XboxInput.dpadRight, .leftStickRight] { bind(.base, input, "navigate.right") }
-        for input in [XboxInput.dpadUp, .leftStickUp] { bind(.base, input, "navigate.up") }
-        for input in [XboxInput.dpadDown, .leftStickDown] { bind(.base, input, "navigate.down") }
+        for input in [XboxInput.dpadUp, .leftStickUp] { bind(.base, input, "pitch.up") }
+        for input in [XboxInput.dpadDown, .leftStickDown] { bind(.base, input, "pitch.down") }
 
         bind(.base, .rightStickUp, "pointer.scroll.up")
         bind(.base, .rightStickDown, "pointer.scroll.down")
