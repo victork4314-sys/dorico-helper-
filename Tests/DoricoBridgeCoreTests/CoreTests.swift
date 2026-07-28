@@ -83,7 +83,7 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(MIDIAddress.address(for: 511), MIDIAddress(channel: 4, note: 127))
     }
 
-    func testDynamicNoteAddressesAreReservedOutsideMIDI LearnCatalog() {
+    func testDynamicNoteAddressesAreReservedOutsideMIDILearnCatalog() {
         let catalogAddresses = Set((0..<512).map(MIDIAddress.address(for:)))
         XCTAssertFalse(catalogAddresses.contains(BridgeDynamicMIDI.placeSelectedNote))
         XCTAssertFalse(catalogAddresses.contains(BridgeDynamicMIDI.pitchUp))
