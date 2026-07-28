@@ -40,6 +40,7 @@ final class AppModel: ObservableObject {
     @Published var bridgeEnabled = true
     @Published var dashboardVisible = true
     @Published var selectedSection: Section = .status
+    // -1 is the visible sidebar. Non-negative values are rows in the content column.
     @Published var selectedRow = 0
     @Published var controllerStatus = "No Xbox controller connected"
     @Published var doricoStatus = "Dorico Pro is not running"
@@ -189,10 +190,12 @@ final class AppModel: ObservableObject {
         case .showDashboard: showDashboard()
         case .hideDashboard: hideDashboard()
         case .toggleDashboard: toggleDashboard()
-        case .helperUp: navigateRows(-1)
-        case .helperDown: navigateRows(1)
-        case .helperLeft: adjustSelected(-1)
-        case .helperRight: adjustSelected(1)
+        case .helperUp: moveVertical(-1)
+        case .helperDown: moveVertical(1)
+        case .helperLeft: moveHorizontal(-1)
+        case .helperRight: moveHorizontal(1)
+        case .helperDecrease: adjustSelected(-1)
+        case .helperIncrease: adjustSelected(1)
         case .helperActivate: activateSelected()
         case .helperBack: helperBack()
         case .toggleBridge: bridgeEnabled.toggle()
@@ -229,26 +232,44 @@ final class AppModel: ObservableObject {
         selectedRow = 0
     }
 
-    func navigateRows(_ delta: Int) {
-        let count = max(1, uiItems.count)
-        selectedRow = (selectedRow + delta + count) % count
+    func moveVertical(_ delta: Int) {
+        if selectedRow < 0 {
+            let sections = Section.allCases
+            guard let index = sections.firstIndex(of: selectedSection) else { return }
+            selectedSection = sections[(index + delta + sections.count) % sections.count]
+        } else {
+            let count = max(1, uiItems.count)
+            selectedRow = (selectedRow + delta + count) % count
+        }
         controller.haptic(.tick)
+    }
+
+    func moveHorizontal(_ direction: Int) {
+        if direction < 0, selectedRow >= 0 {
+            selectedRow = -1
+            controller.haptic(.tick)
+        } else if direction > 0, selectedRow < 0 {
+            selectedRow = uiItems.isEmpty ? -1 : 0
+            controller.haptic(.tick)
+        }
     }
 
     func adjustSelected(_ direction: Int) {
         let items = uiItems
-        guard items.indices.contains(selectedRow) else { return }
-        if items[selectedRow].kind == .adjustable {
-            items[selectedRow].adjust(direction)
-        } else {
-            let sections = Section.allCases
-            if let index = sections.firstIndex(of: selectedSection) {
-                selectSection(sections[(index + direction + sections.count) % sections.count])
-            }
+        guard selectedRow >= 0, items.indices.contains(selectedRow), items[selectedRow].kind == .adjustable else {
+            controller.haptic(.cancel)
+            return
         }
+        items[selectedRow].adjust(direction)
+        controller.haptic(.tick)
     }
 
     func activateSelected() {
+        if selectedRow < 0 {
+            selectedRow = uiItems.isEmpty ? -1 : 0
+            controller.haptic(.soft)
+            return
+        }
         let items = uiItems
         guard items.indices.contains(selectedRow) else { return }
         items[selectedRow].activate()
@@ -257,6 +278,7 @@ final class AppModel: ObservableObject {
 
     func helperBack() {
         if controllerKeyboard.isVisible {
+            DoricoTextRouteCoordinator.shared.cancel()
             controllerKeyboard.close()
             keyboardGestureEngine.reset()
             captureMessage = "Xbox keyboard closed"
@@ -268,7 +290,8 @@ final class AppModel: ObservableObject {
             return
         }
         if selectedSection != .status {
-            selectSection(.status)
+            selectedSection = .status
+            selectedRow = -1
         } else {
             hideDashboard()
         }
@@ -412,6 +435,7 @@ final class AppModel: ObservableObject {
         case .menu, .rightThumbstickButton:
             submitControllerKeyboard()
         case .view:
+            DoricoTextRouteCoordinator.shared.cancel()
             controllerKeyboard.close()
             keyboardGestureEngine.reset()
             captureMessage = "Xbox keyboard cancelled"
@@ -435,6 +459,7 @@ final class AppModel: ObservableObject {
             captureMessage = text.isEmpty ? "Command search cleared" : "Showing commands matching “\(text)”"
         case .typeIntoDorico:
             guard !text.isEmpty else {
+                DoricoTextRouteCoordinator.shared.cancel()
                 captureMessage = "Nothing was entered"
                 return
             }
@@ -472,6 +497,7 @@ final class AppModel: ObservableObject {
 
     private func executeInDorico(_ action: CommandAction, label: String) {
         guard detector.runningApplication() != nil else {
+            DoricoTextRouteCoordinator.shared.cancel()
             captureMessage = "Dorico Pro is not running"
             log("Could not execute controller text because Dorico Pro is not running")
             return
@@ -496,6 +522,9 @@ final class AppModel: ObservableObject {
     private var currentContextDescription: String {
         if controllerKeyboard.isVisible {
             return "\(controllerKeyboard.purpose.title), \(controllerKeyboard.text), selected \(controllerKeyboard.selectedKey), page \(controllerKeyboard.pageName)"
+        }
+        if selectedRow < 0 {
+            return "Sidebar, \(selectedSection.rawValue) section. \(controllerStatus). \(doricoStatus)."
         }
         let row = uiItems.indices.contains(selectedRow) ? uiItems[selectedRow].title : "No item"
         return "\(selectedSection.rawValue), \(row). \(controllerStatus). \(doricoStatus)."
