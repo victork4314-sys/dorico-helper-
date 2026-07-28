@@ -1,0 +1,27 @@
+name: macOS build and tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Test core
+        run: swift test
+      - name: Build native app
+        run: swift build -c release
+      - name: Package executable
+        run: |
+          mkdir -p artifact
+          cp .build/release/DoricoXboxBridge artifact/
+          cp README.md artifact/
+          ditto -c -k --sequesterRsrc --keepParent artifact DoricoXboxBridge-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DoricoXboxBridge-macOS
+          path: DoricoXboxBridge-macOS.zip
