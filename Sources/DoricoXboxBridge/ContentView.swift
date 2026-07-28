@@ -5,6 +5,7 @@ import DoricoBridgeCore
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var mappingTarget: ControllerMappingTarget?
+    @State private var selectedInputs = Set<XboxInput>()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -15,8 +16,7 @@ struct ContentView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) {
             if let message = model.captureMessage {
-                statusBanner(message)
-                    .padding()
+                statusBanner(message).padding()
             }
         }
         .overlay {
@@ -25,10 +25,11 @@ struct ContentView: View {
             }
         }
         .sheet(item: $mappingTarget) { target in
-            MappingActionPickerView(model: model, input: target.input)
+            MappingActionPickerView(model: model, inputs: target.inputs)
         }
         .onChange(of: model.activeProfileIdentity) { oldValue, newValue in
             guard oldValue != newValue else { return }
+            selectedInputs.removeAll()
             model.enforceActiveProfileIsolation()
         }
     }
@@ -36,10 +37,8 @@ struct ContentView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Dorico Xbox Bridge")
-                    .font(.title2.weight(.semibold))
-                Text("Dorico Pro 6.1 · Xbox controller")
-                    .foregroundStyle(.secondary)
+                Text("Dorico Xbox Bridge").font(.title2.weight(.semibold))
+                Text("Dorico Pro 6.1 · Xbox controller").foregroundStyle(.secondary)
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 8)
@@ -47,12 +46,9 @@ struct ContentView: View {
             ForEach(AppModel.Section.allCases) { section in
                 let selected = model.selectedSection == section
                 let controllerFocused = selected && model.selectedRow < 0
-                Button {
-                    model.selectSection(section)
-                } label: {
+                Button { model.selectSection(section) } label: {
                     HStack {
-                        Image(systemName: section.symbol)
-                            .frame(width: 22)
+                        Image(systemName: section.symbol).frame(width: 22)
                         Text(section.rawValue)
                         Spacer()
                     }
@@ -99,19 +95,15 @@ struct ContentView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
-                Text(model.selectedSection.rawValue)
-                    .font(.title2.weight(.semibold))
-                Text(sectionSubtitle)
-                    .foregroundStyle(.secondary)
+                Text(model.selectedSection.rawValue).font(.title2.weight(.semibold))
+                Text(sectionSubtitle).foregroundStyle(.secondary)
             }
             Spacer()
             if model.selectedSection == .commands, !model.commandFilter.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                    Text(model.commandFilter)
-                        .lineLimit(1)
-                    Text("Xbox filter")
-                        .foregroundStyle(.secondary)
+                    Text(model.commandFilter).lineLimit(1)
+                    Text("Xbox filter").foregroundStyle(.secondary)
                 }
                 .font(.caption)
                 .padding(.horizontal, 10)
@@ -121,8 +113,7 @@ struct ContentView: View {
             }
             if model.selectedSection == .mappings || model.selectedSection == .settings || model.selectedSection == .commands {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(model.activeProfileName)
-                        .fontWeight(.semibold)
+                    Text(model.activeProfileName).fontWeight(.semibold)
                     Text("\(model.selectedLayer.displayName) · \(model.selectedGesture.displayName)")
                         .foregroundStyle(.secondary)
                 }
@@ -137,9 +128,14 @@ struct ContentView: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     if model.selectedSection == .mappings {
-                        ControllerDiagramView(model: model) { input in
-                            mappingTarget = ControllerMappingTarget(input: input)
-                        }
+                        ControllerDiagramView(
+                            model: model,
+                            selectedInputs: $selectedInputs,
+                            mapSelection: {
+                                guard !selectedInputs.isEmpty else { return }
+                                mappingTarget = ControllerMappingTarget(inputs: selectedInputs)
+                            }
+                        )
                         .id("controller.diagram")
                         .padding(.bottom, 10)
                     }
@@ -153,8 +149,7 @@ struct ContentView: View {
                         .padding(.top, 70)
                     }
                     ForEach(Array(model.uiItems.enumerated()), id: \.element.id) { index, item in
-                        itemRow(item, index: index)
-                            .id(item.id)
+                        itemRow(item, index: index).id(item.id)
                     }
                     if model.selectedSection == .diagnostics, !model.diagnosticsLog.isEmpty {
                         diagnosticsLog
@@ -165,7 +160,9 @@ struct ContentView: View {
             .onChange(of: model.selectedRow) { _, newValue in
                 let items = model.uiItems
                 if items.indices.contains(newValue) {
-                    withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(items[newValue].id, anchor: .center) }
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        proxy.scrollTo(items[newValue].id, anchor: .center)
+                    }
                 }
             }
         }
@@ -182,8 +179,7 @@ struct ContentView: View {
                     .fill(controllerFocused ? Color.accentColor : Color.secondary.opacity(0.25))
                     .frame(width: 5)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title)
-                        .fontWeight(controllerFocused ? .semibold : .regular)
+                    Text(item.title).fontWeight(controllerFocused ? .semibold : .regular)
                     Text(item.detail)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -195,8 +191,7 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("Adjust with LB and RB")
                 } else if item.kind == .action {
-                    Image(systemName: "button.programmable")
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "button.programmable").foregroundStyle(.secondary)
                 }
             }
             .padding(14)
@@ -213,8 +208,7 @@ struct ContentView: View {
 
     private var diagnosticsLog: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Recent events")
-                .font(.headline)
+            Text("Recent events").font(.headline)
             ForEach(Array(model.diagnosticsLog.enumerated()), id: \.offset) { _, line in
                 Text(line)
                     .font(.system(.caption, design: .monospaced))
@@ -227,10 +221,9 @@ struct ContentView: View {
     private var controllerLegend: some View {
         HStack(spacing: 18) {
             legend("A", "Place selected note")
-            legend("B", "Back / cancel")
-            legend("D-pad / left stick", "Move pitch / position")
-            legend("LB / RB", "Previous / next zone")
-            legend("Right stick", "Scroll / pointer")
+            legend("Any set", "Exact custom combination")
+            legend("Keyboard", "All symbols and modifiers")
+            legend("Sequence", "Ordered mixed actions")
             Spacer()
             if let capture = model.captureAction {
                 Text("Assigning: \(capture.title)")
@@ -271,17 +264,17 @@ struct ContentView: View {
     private var sectionSubtitle: String {
         switch model.selectedSection {
         case .status: "Connection, permissions, Dorico detection, controller text, and universal fallbacks"
-        case .mappings: "Only the selected layout applies. Click any controller control to choose a simple, searched, or custom action."
-        case .commands: "Search, scan, create Jump Bar actions, or map any built-in and live Dorico command."
-        case .profiles: "Choose one exclusive mapping layout; other layouts remain saved but inactive."
-        case .settings: "Move freely with the D-pad; use LB and RB to adjust the focused value."
+        case .mappings: "Select one control or every control, then assign a simple action, command, full keyboard shortcut, or ordered sequence."
+        case .commands: "Search, scan, or choose any built-in and live Dorico command, then hold an exact controller combination."
+        case .profiles: "Choose one exclusive mapping layout; all other layouts remain saved but inactive."
+        case .settings: "Adjust the normal or pointer context, gestures, stick behavior, timing, and haptics."
         case .diagnostics: "Real controller, Dorico, Accessibility, MIDI, routing, and stuck-input state."
         }
     }
 
     private var emptyStateText: String {
         switch model.selectedSection {
-        case .mappings: "Click a control in the controller diagram or use Add Mapping."
+        case .mappings: "Select controls in the controller diagram, or use Add Mapping."
         case .commands: "Clear the controller-entered search or scan Dorico menus."
         default: "No items are available."
         }

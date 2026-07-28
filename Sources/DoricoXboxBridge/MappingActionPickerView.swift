@@ -4,35 +4,30 @@ import SwiftUI
 import DoricoBridgeCore
 
 struct ControllerMappingTarget: Identifiable {
-    let input: XboxInput
-    var id: String { input.rawValue }
+    let inputs: Set<XboxInput>
+    var id: String { XboxInput.allCases.filter(inputs.contains).map(\.rawValue).joined(separator: "+") }
 }
 
 struct MappingActionPickerView: View {
     @ObservedObject var model: AppModel
-    let input: XboxInput
+    let inputs: Set<XboxInput>
     @Environment(\.dismiss) private var dismiss
 
-    @State private var layer: MappingLayer
+    @State private var pointerContext: Bool
     @State private var gesture: BindingGesture
     @State private var search = ""
-    @State private var customKey = ""
-    @State private var commandModifier = false
-    @State private var shiftModifier = false
-    @State private var optionModifier = false
-    @State private var controlModifier = false
-    @State private var functionModifier = false
+    @State private var capturedShortcut: KeyChord?
     @State private var customText = ""
     @State private var jumpBarCommand = ""
     @State private var midiChannel = 1
     @State private var midiNote = 60
-    @State private var macroName = ""
-    @State private var macroSteps = ""
+    @State private var sequenceName = ""
+    @State private var sequenceSteps: [ActionSequenceDraftStep] = []
 
-    init(model: AppModel, input: XboxInput) {
+    init(model: AppModel, inputs: Set<XboxInput>) {
         self.model = model
-        self.input = input
-        _layer = State(initialValue: model.selectedLayer)
+        self.inputs = inputs
+        _pointerContext = State(initialValue: model.selectedLayer == .pointer)
         _gesture = State(initialValue: model.selectedGesture)
     }
 
@@ -42,7 +37,8 @@ struct MappingActionPickerView: View {
         "pitch.up", "pitch.down", "navigate.left", "navigate.right",
         "navigate.up", "navigate.down", "duration.16", "duration.8",
         "duration.4", "duration.2", "duration.1", "duration.dot", "tie",
-        "xbox.popover.ornaments", "pointer.toggle", "pointer.click"
+        "xbox.popover.ornaments", "pointer.toggle", "pointer.click",
+        "pointer.double", "pointer.right"
     ]
 
     private var simpleActions: [ActionDescriptor] {
@@ -52,16 +48,19 @@ struct MappingActionPickerView: View {
     private var searchableActions: [ActionDescriptor] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
-        let all = DefaultCatalog.actions + model.menuCommands
-        return Array(all.filter { action in
+        return Array((DefaultCatalog.actions + model.menuCommands).filter { action in
             action.title.localizedCaseInsensitiveContains(query) ||
             action.category.localizedCaseInsensitiveContains(query) ||
             action.detail.localizedCaseInsensitiveContains(query)
-        }.prefix(120))
+        }.prefix(160))
+    }
+
+    private var combinationName: String {
+        XboxInput.allCases.filter(inputs.contains).map(\.displayName).joined(separator: " + ")
     }
 
     private var currentAction: CommandAction? {
-        model.mappedAction(for: input, layer: layer, gesture: gesture)
+        model.mappedAction(for: inputs, pointerMode: pointerContext, gesture: gesture)
     }
 
     var body: some View {
@@ -71,23 +70,29 @@ struct MappingActionPickerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     targetSettings
+                    ActionSequenceBuilderView(
+                        name: $sequenceName,
+                        steps: $sequenceSteps,
+                        assignSequence: assignBuiltSequence
+                    )
                     simpleSection
                     searchSection
-                    customSection
+                    customKeyboardSection
+                    customTextAndCommandSection
+                    customMIDISection
                     deleteSection
                 }
                 .padding(20)
             }
         }
-        .frame(minWidth: 780, minHeight: 680)
+        .frame(minWidth: 880, minHeight: 760)
     }
 
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Map \(input.displayName)")
-                    .font(.title2.weight(.semibold))
-                Text("Changes apply only to “\(model.activeProfileName)”.")
+                Text("Map \(combinationName)").font(.title2.weight(.semibold))
+                Text("Every selected control must be held. Changes apply only to “\(model.activeProfileName)”.")
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -98,20 +103,19 @@ struct MappingActionPickerView: View {
 
     private var targetSettings: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Button and context", icon: "gamecontroller")
-            HStack(spacing: 14) {
-                Picker("Context", selection: $layer) {
-                    ForEach(MappingLayer.allCases, id: \.self) { value in
-                        Text(value.displayName).tag(value)
-                    }
-                }
+            sectionTitle("Exact combination and context", icon: "gamecontroller")
+            Text(combinationName).font(.headline).textSelection(.enabled)
+            HStack(spacing: 18) {
+                Toggle("Only in pointer mode", isOn: $pointerContext)
                 Picker("Gesture", selection: $gesture) {
-                    ForEach(BindingGesture.allCases, id: \.self) { value in
-                        Text(value.displayName).tag(value)
-                    }
+                    ForEach(BindingGesture.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
+                .frame(maxWidth: 260)
             }
-            Text(currentAction.map { "Current action: \($0.summary)" } ?? "This slot is currently unmapped.")
+            Text("Extra held controls create a different combination. No smaller mapping fires underneath this exact set.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Text(currentAction.map { "Current action: \($0.summary)" } ?? "This exact combination is currently unmapped.")
                 .font(.callout)
                 .foregroundStyle(currentAction == nil ? Color.secondary : Color.accentColor)
         }
@@ -120,13 +124,10 @@ struct MappingActionPickerView: View {
     private var simpleSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("Simple actions", icon: "sparkles")
-            Text("Common actions are ready to pick—no command hunting required.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 8)], spacing: 8) {
-                ForEach(simpleActions) { action in
-                    actionButton(action)
-                }
+            Text("Place Note, Delete, movement, playback, durations, editing, pointer actions, and other common controls are ready without command hunting.")
+                .font(.callout).foregroundStyle(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 8)], spacing: 8) {
+                ForEach(simpleActions) { action in choiceRow(action) }
             }
         }
     }
@@ -134,101 +135,107 @@ struct MappingActionPickerView: View {
     private var searchSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                sectionTitle("Find any Dorico command", icon: "magnifyingglass")
+                sectionTitle("Find any Dorico command or action", icon: "magnifyingglass")
                 Spacer()
                 Button("Scan Dorico menus") { model.scanDoricoMenus() }
             }
-            TextField("Search actions, Dorico menu commands, popovers, MIDI slots…", text: $search)
+            TextField("Search commands, popovers, pointer actions, named MIDI pitches…", text: $search)
                 .textFieldStyle(.roundedBorder)
             if search.isEmpty {
                 Text("Type a name, or scan the running Dorico menu bar to include its live commands.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(.callout).foregroundStyle(.secondary)
             } else if searchableActions.isEmpty {
-                ContentUnavailableView("No matching command", systemImage: "magnifyingglass", description: Text("Try another search or scan Dorico menus."))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                ContentUnavailableView("No matching action", systemImage: "magnifyingglass", description: Text("Try another search or scan Dorico menus."))
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
             } else {
                 LazyVStack(spacing: 7) {
-                    ForEach(searchableActions) { action in actionButton(action) }
+                    ForEach(searchableActions) { action in choiceRow(action) }
                 }
             }
         }
     }
 
-    private var customSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            sectionTitle("Completely custom action", icon: "slider.horizontal.3")
-
-            GroupBox("Custom keyboard shortcut") {
+    private var customKeyboardSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Exact keyboard shortcut", icon: "keyboard")
+            GroupBox("Capture every symbol and modifier") {
                 VStack(alignment: .leading, spacing: 10) {
-                    TextField("Key, such as n, return, delete, left…", text: $customKey)
-                        .textFieldStyle(.roundedBorder)
+                    KeyboardShortcutRecorder(shortcut: $capturedShortcut)
                     HStack {
-                        Toggle("Cmd", isOn: $commandModifier)
-                        Toggle("Shift", isOn: $shiftModifier)
-                        Toggle("Option", isOn: $optionModifier)
-                        Toggle("Control", isOn: $controlModifier)
-                        Toggle("Fn", isOn: $functionModifier)
-                    }
-                    Button("Assign custom shortcut") {
-                        if let descriptor = model.customKeyDescriptor(key: customKey, modifiers: selectedModifiers) {
-                            assign(descriptor)
+                        Button("Assign shortcut") {
+                            guard let capturedShortcut else { return }
+                            assign(model.customCapturedKeyDescriptor(capturedShortcut))
                         }
-                    }
-                    .disabled(customKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                .padding(8)
-            }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(capturedShortcut == nil)
 
-            GroupBox("Type your own text or command") {
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField("Text to type into Dorico", text: $customText)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Assign typed text") {
-                        if let descriptor = model.customTextDescriptor(customText) { assign(descriptor) }
-                    }
-                    .disabled(customText.isEmpty)
-
-                    Divider()
-
-                    TextField("Dorico Jump Bar command", text: $jumpBarCommand)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Assign Jump Bar command") {
-                        if let descriptor = model.customJumpBarDescriptor(jumpBarCommand) { assign(descriptor) }
-                    }
-                    .disabled(jumpBarCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                .padding(8)
-            }
-
-            GroupBox("Custom macro") {
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField("Macro name (optional)", text: $macroName)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Shortcut steps separated by commas, e.g. shift+n, 6, c", text: $macroSteps)
-                        .textFieldStyle(.roundedBorder)
-                    Text("Use + inside a step for modifiers: cmd+shift+s, ctrl+1, return.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Assign custom macro") {
-                        if let descriptor = model.customMacroDescriptor(name: macroName, chords: parsedMacroSteps) {
-                            assign(descriptor)
+                        Button("Add shortcut to sequence") {
+                            guard let capturedShortcut else { return }
+                            addToSequence(model.customCapturedKeyDescriptor(capturedShortcut))
                         }
+                        .disabled(capturedShortcut == nil)
                     }
-                    .disabled(parsedMacroSteps.isEmpty)
                 }
                 .padding(8)
             }
+        }
+    }
 
-            GroupBox("Custom MIDI action") {
+    private var customTextAndCommandSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Custom text and Jump Bar", icon: "text.cursor")
+
+            GroupBox("Type your own text") {
+                VStack(alignment: .leading, spacing: 9) {
+                    TextField("Text to type into Dorico", text: $customText).textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Assign typed text") {
+                            if let descriptor = model.customTextDescriptor(customText) { assign(descriptor) }
+                        }
+                        .disabled(customText.isEmpty)
+                        Button("Add text to sequence") {
+                            if let descriptor = model.customTextDescriptor(customText) { addToSequence(descriptor) }
+                        }
+                        .disabled(customText.isEmpty)
+                    }
+                }.padding(8)
+            }
+
+            GroupBox("Run a Dorico Jump Bar command") {
+                VStack(alignment: .leading, spacing: 9) {
+                    TextField("Jump Bar command", text: $jumpBarCommand).textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Assign Jump Bar command") {
+                            if let descriptor = model.customJumpBarDescriptor(jumpBarCommand) { assign(descriptor) }
+                        }
+                        .disabled(jumpBarCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("Add Jump Bar command to sequence") {
+                            if let descriptor = model.customJumpBarDescriptor(jumpBarCommand) { addToSequence(descriptor) }
+                        }
+                        .disabled(jumpBarCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }.padding(8)
+            }
+        }
+    }
+
+    private var customMIDISection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Custom MIDI pitch", icon: "pianokeys")
+            GroupBox("Named musical pitch") {
                 HStack(spacing: 18) {
-                    Stepper("Channel \(midiChannel)", value: $midiChannel, in: 1...16)
-                    Stepper("Note \(midiNote)", value: $midiNote, in: 0...127)
-                    Spacer()
-                    Button("Assign MIDI pulse") {
-                        assign(model.customMIDIDescriptor(channel: midiChannel, note: midiNote))
+                    Picker("Pitch", selection: $midiNote) {
+                        ForEach(0...127, id: \.self) { value in
+                            Text(MIDIAddress.noteName(for: UInt8(value))).tag(value)
+                        }
                     }
+                    .frame(width: 180)
+                    Stepper("Channel \(midiChannel)", value: $midiChannel, in: 1...16)
+                    Text("Selected: \(MIDIAddress.noteName(for: UInt8(midiNote)))")
+                        .font(.callout.monospaced()).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Assign MIDI pitch") { assign(midiDescriptor) }
+                    Button("Add MIDI pitch to sequence") { addToSequence(midiDescriptor) }
                 }
                 .padding(8)
             }
@@ -238,86 +245,66 @@ struct MappingActionPickerView: View {
     private var deleteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionTitle("Remove mapping", icon: "trash")
-            Button("Remove only this slot", role: .destructive) {
-                model.removeDirectMapping(for: input, layer: layer, gesture: gesture)
+            Button("Remove only this exact combination", role: .destructive) {
+                model.removeDirectMapping(for: inputs, pointerMode: pointerContext, gesture: gesture)
                 dismiss()
             }
             .disabled(currentAction == nil)
         }
     }
 
-    private var selectedModifiers: Set<KeyModifier> {
-        var output = Set<KeyModifier>()
-        if commandModifier { output.insert(.command) }
-        if shiftModifier { output.insert(.shift) }
-        if optionModifier { output.insert(.option) }
-        if controlModifier { output.insert(.control) }
-        if functionModifier { output.insert(.function) }
-        return output
+    private var midiDescriptor: ActionDescriptor {
+        model.customMIDIDescriptor(channel: midiChannel, note: midiNote)
     }
 
-    private var parsedMacroSteps: [KeyChord] {
-        macroSteps
-            .split(separator: ",")
-            .compactMap { parseChord(String($0)) }
-    }
-
-    private func parseChord(_ source: String) -> KeyChord? {
-        let parts = source
-            .split(separator: "+")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty }
-        guard let key = parts.last else { return nil }
-        var modifiers = Set<KeyModifier>()
-        for token in parts.dropLast() {
-            switch token {
-            case "cmd", "command": modifiers.insert(.command)
-            case "shift": modifiers.insert(.shift)
-            case "opt", "option", "alt": modifiers.insert(.option)
-            case "ctrl", "control": modifiers.insert(.control)
-            case "fn", "function": modifiers.insert(.function)
-            default: return nil
-            }
-        }
-        return KeyChord(key, modifiers: modifiers)
-    }
-
-    private func actionButton(_ action: ActionDescriptor) -> some View {
-        Button {
-            assign(action)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(Color.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(action.title)
-                        .fontWeight(.semibold)
-                    Text("\(action.category) — \(action.detail)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                Spacer()
-            }
-            .padding(10)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .overlay {
-                RoundedRectangle(cornerRadius: 9)
-                    .stroke(Color(nsColor: .separatorColor))
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 9))
-        }
-        .buttonStyle(.plain)
+    private func choiceRow(_ action: ActionDescriptor) -> some View {
+        ActionChoiceRow(
+            action: action,
+            assign: { assign(action) },
+            addToSequence: { addToSequence(action) }
+        )
     }
 
     private func sectionTitle(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.headline)
+        Label(text, systemImage: icon).font(.headline)
+    }
+
+    private func addToSequence(_ descriptor: ActionDescriptor) {
+        sequenceSteps.append(ActionSequenceDraftStep(descriptor: descriptor))
+    }
+
+    private func assignBuiltSequence() {
+        let commandSteps = sequenceSteps.map(\.commandStep)
+        guard let descriptor = model.customSequenceDescriptor(name: sequenceName, steps: commandSteps) else { return }
+        assign(descriptor)
     }
 
     private func assign(_ descriptor: ActionDescriptor) {
-        model.assignAction(descriptor, to: input, layer: layer, gesture: gesture)
+        model.assignAction(descriptor, to: inputs, pointerMode: pointerContext, gesture: gesture)
         dismiss()
+    }
+}
+
+private struct ActionChoiceRow: View {
+    let action: ActionDescriptor
+    let assign: () -> Void
+    let addToSequence: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(action.title).fontWeight(.semibold)
+                Text("\(action.category) — \(action.detail)")
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+            Spacer()
+            Button("Assign", action: assign).buttonStyle(.borderedProminent)
+            Button("Add to sequence", action: addToSequence)
+        }
+        .padding(10)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .overlay { RoundedRectangle(cornerRadius: 9).stroke(Color(nsColor: .separatorColor)) }
+        .clipShape(RoundedRectangle(cornerRadius: 9))
     }
 }
 #endif
