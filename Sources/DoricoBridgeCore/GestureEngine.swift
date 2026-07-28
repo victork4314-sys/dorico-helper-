@@ -7,10 +7,12 @@ public struct GestureEngine: Sendable {
         var nextRepeatAt: TimeInterval = 0
         var holdEmitted = false
         var pendingSingleDeadline: TimeInterval?
+        var pendingBumperDeadline: TimeInterval?
         var lastReleaseAt: TimeInterval?
     }
 
     private var states: [XboxInput: State] = [:]
+    private let bumperComboWindow: TimeInterval = 0.120
 
     public init() {}
 
@@ -22,6 +24,8 @@ public struct GestureEngine: Sendable {
         var output: [GestureEmission] = []
         let settings = profile.settings
         let supportsDouble = profile.hasBinding(input: event.input, gesture: .doublePress)
+        let isBumper = event.input == .leftBumper || event.input == .rightBumper
+        let supportsBumperCombo = profile.bindings.keys.contains { $0.layer == .bothBumpers && $0.gesture == .press }
 
         if event.isPressed && !state.isPressed {
             state.isPressed = true
@@ -29,9 +33,18 @@ public struct GestureEngine: Sendable {
             state.nextRepeatAt = event.timestamp + settings.repeatDelay
             state.holdEmitted = false
 
-            if supportsDouble,
-               let lastRelease = state.lastReleaseAt,
-               event.timestamp - lastRelease <= settings.doublePressWindow {
+            if isBumper && supportsBumperCombo {
+                let other: XboxInput = event.input == .leftBumper ? .rightBumper : .leftBumper
+                if var otherState = states[other], otherState.isPressed, otherState.pendingBumperDeadline != nil {
+                    otherState.pendingBumperDeadline = nil
+                    states[other] = otherState
+                    output.append(GestureEmission(input: event.input, gesture: .press, timestamp: event.timestamp))
+                } else {
+                    state.pendingBumperDeadline = event.timestamp + bumperComboWindow
+                }
+            } else if supportsDouble,
+                      let lastRelease = state.lastReleaseAt,
+                      event.timestamp - lastRelease <= settings.doublePressWindow {
                 state.pendingSingleDeadline = nil
                 output.append(GestureEmission(input: event.input, gesture: .doublePress, timestamp: event.timestamp))
             } else if supportsDouble {
@@ -42,6 +55,10 @@ public struct GestureEngine: Sendable {
         } else if !event.isPressed && state.isPressed {
             state.isPressed = false
             state.lastReleaseAt = event.timestamp
+            if state.pendingBumperDeadline != nil {
+                state.pendingBumperDeadline = nil
+                output.append(GestureEmission(input: event.input, gesture: .press, timestamp: event.timestamp))
+            }
             output.append(GestureEmission(input: event.input, gesture: .release, timestamp: event.timestamp))
         }
 
@@ -59,6 +76,11 @@ public struct GestureEngine: Sendable {
         for input in states.keys {
             guard var state = states[input] else { continue }
 
+            if let deadline = state.pendingBumperDeadline, timestamp >= deadline {
+                state.pendingBumperDeadline = nil
+                output.append(GestureEmission(input: input, gesture: .press, timestamp: deadline))
+            }
+
             if let deadline = state.pendingSingleDeadline, timestamp >= deadline {
                 state.pendingSingleDeadline = nil
                 output.append(GestureEmission(input: input, gesture: .press, timestamp: deadline))
@@ -70,7 +92,7 @@ public struct GestureEngine: Sendable {
                     output.append(GestureEmission(input: input, gesture: .hold, timestamp: timestamp))
                 }
 
-                if timestamp >= state.nextRepeatAt {
+                if state.pendingBumperDeadline == nil, timestamp >= state.nextRepeatAt {
                     state.nextRepeatAt = timestamp + settings.repeatRate
                     output.append(GestureEmission(input: input, gesture: .repeatPress, timestamp: timestamp))
                 }
@@ -152,14 +174,8 @@ public struct BindingResolver: Sendable {
             if let action = profile.action(for: press) { return action }
         }
 
-        if layer != .base {
-            let fallback = BindingKey(layer: .base, input: emission.input, gesture: emission.gesture)
-            if let action = profile.action(for: fallback) { return action }
-            if emission.gesture == .repeatPress {
-                return profile.action(for: BindingKey(layer: .base, input: emission.input, gesture: .press))
-            }
-        }
-
+        // Deliberately no base-layer fallback. An unmapped held combination must
+        // do nothing rather than unexpectedly firing a second command.
         return nil
     }
 }
