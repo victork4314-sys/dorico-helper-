@@ -9,12 +9,14 @@ This is not a generic controller-to-keyboard mapper. It combines Xbox-native inp
 - Xbox-only controller detection using Apple's GameController framework.
 - A/B/X/Y, D-pad, bumpers, analog triggers, sticks, stick clicks, Menu, View, and Guide when macOS passes Guide events through.
 - Legato-style controller behavior: A activates, B backs out, movement is not panel-trapped, held layers are supported, pointer mode is always available, and every mapping/profile/settings screen is controllable from the pad.
-- Default Dorico Pro profile with navigation, editing, playback, note input, documented duration keys, documented popovers, Jump Bar entry, accessibility focus, and pointer layers.
+- Separate visible focus for the dashboard sidebar and content column, with directional movement that cannot be trapped by an adjustable Settings row.
+- Default Dorico Pro profile with navigation, editing, playback, note input, documented duration keys, controller-written popovers, Jump Bar Commands/Go To entry, accessibility focus, and pointer layers.
+- A controller-operated two-dimensional text keyboard for Dorico fields, every default text-driven popover, Jump Bar, command search, and reusable mappings.
 - 512 virtual MIDI Learn slots across four MIDI channels, with room to expand to the full 2,048 channel/note address space.
 - Live accessible Dorico menu scanning so commands are not limited to a hard-coded list.
 - Spatial Accessibility focus that chooses the nearest control in the requested direction across the focused Dorico window.
 - JSON profile persistence, controller-safe import, and controller-safe export without native file-picker traps.
-- Unit tests for layer precedence, B/back behavior, repeat fallback, double-press handling, profile persistence, and MIDI addressing.
+- Automated coverage for routing layers, helper isolation, spatial dashboard controls, bumper adjustment, text routes, strict Dorico targeting, persistence, MIDI addressing, and universal fallbacks.
 - Native macOS CI testing, Universal 2 release building, app-bundle signing verification, ZIP packaging, and DMG packaging on every push.
 
 ## Install the app
@@ -69,11 +71,13 @@ The script runs tests, compiles both Mac architectures, creates and ad-hoc signs
 
 ## Controller rules inside the bridge
 
-- **A:** activate or confirm
+- **A:** activate the focused content item or enter the selected sidebar section
 - **B:** back or cancel
-- **D-pad / left stick:** move spatially through the current interface without panel traps
-- **Left / right:** adjust a value or change section where appropriate
-- **View:** show the dashboard
+- **D-pad / left stick Up/Down:** move within the visibly focused sidebar or content column
+- **Left:** move from content to the sidebar
+- **Right:** enter content from the sidebar
+- **LB / RB:** decrease or increase the focused adjustable value
+- **View / Guide:** show or hide the dashboard when macOS exposes the button
 
 ## Important Guide-button behavior
 
