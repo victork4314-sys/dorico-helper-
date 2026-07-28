@@ -38,7 +38,7 @@ plutil -lint "$CONTENTS/Info.plist"
 
 lipo -create "$ARM_BINARY" "$INTEL_BINARY" -output "$MACOS/DoricoXboxBridge"
 chmod 755 "$MACOS/DoricoXboxBridge"
-lipo -verify_arch arm64 x86_64 "$MACOS/DoricoXboxBridge"
+lipo "$MACOS/DoricoXboxBridge" -verify_arch arm64 x86_64
 lipo -info "$MACOS/DoricoXboxBridge"
 
 cp README.md "$RESOURCES/README.md"
