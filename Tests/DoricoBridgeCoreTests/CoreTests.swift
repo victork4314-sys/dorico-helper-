@@ -2,7 +2,7 @@ import XCTest
 @testable import DoricoBridgeCore
 
 final class CoreTests: XCTestCase {
-    func testLayerPrecedence() {
+    func testLegacyLayerHelperStillReportsOldContexts() {
         let resolver = BindingResolver()
         XCTAssertEqual(resolver.activeLayer(heldInputs: [.leftTrigger], pointerMode: false), .leftTrigger)
         XCTAssertEqual(resolver.activeLayer(heldInputs: [.leftTrigger, .rightTrigger], pointerMode: false), .bothTriggers)
@@ -11,10 +11,11 @@ final class CoreTests: XCTestCase {
     }
 
     func testBIsAlwaysBackInsideHelper() {
-        let resolver = BindingResolver()
-        let action = resolver.resolve(
+        let action = BindingResolver().resolve(
             emission: GestureEmission(input: .buttonB, gesture: .press, timestamp: 1),
-            heldInputs: [], pointerMode: false, helperUIActive: true,
+            heldInputs: [.buttonB],
+            pointerMode: false,
+            helperUIActive: true,
             profile: DefaultCatalog.legatoStyleProfile
         )
         XCTAssertEqual(action, .internalCommand(.helperBack))
@@ -25,13 +26,15 @@ final class CoreTests: XCTestCase {
         for input in [XboxInput.buttonX, .buttonY, .menu, .leftTrigger, .rightTrigger] {
             XCTAssertNil(resolver.resolve(
                 emission: GestureEmission(input: input, gesture: .press, timestamp: 1),
-                heldInputs: [input], pointerMode: false, helperUIActive: true,
+                heldInputs: [input],
+                pointerMode: false,
+                helperUIActive: true,
                 profile: DefaultCatalog.legatoStyleProfile
             ), "\(input.displayName) leaked through the active helper UI")
         }
     }
 
-    func testHelperBumpersAdjustWithoutStealingDirectionalMovement() {
+    func testHelperNavigationRemainsImmediate() {
         let resolver = BindingResolver()
         let profile = DefaultCatalog.legatoStyleProfile
         XCTAssertEqual(resolver.resolve(
@@ -44,35 +47,37 @@ final class CoreTests: XCTestCase {
         ), .internalCommand(.helperIncrease))
         XCTAssertEqual(resolver.resolve(
             emission: GestureEmission(input: .dpadLeft, gesture: .press, timestamp: 1),
-            heldInputs: [], pointerMode: false, helperUIActive: true, profile: profile
+            heldInputs: [.dpadLeft], pointerMode: false, helperUIActive: true, profile: profile
         ), .internalCommand(.helperLeft))
     }
 
-    func testRepeatFallsBackToPressBindingWithinSameLayer() {
+    func testRepeatFallsBackToExactPressBinding() {
         let action = BindingResolver().resolve(
-            emission: GestureEmission(input: .dpadRight, gesture: .repeatPress, timestamp: 1),
-            heldInputs: [], pointerMode: false, helperUIActive: false,
+            emission: GestureEmission(inputs: [.dpadRight], primaryInput: .dpadRight, gesture: .repeatPress, timestamp: 1),
+            heldInputs: [.dpadRight],
+            pointerMode: false,
+            helperUIActive: false,
             profile: DefaultCatalog.legatoStyleProfile
         )
         XCTAssertEqual(action, .keyChord(KeyChord("right")))
     }
 
-    func testDoublePressDefersSinglePress() {
+    func testDoublePressDefersAndReplacesSinglePress() {
         var profile = DefaultCatalog.legatoStyleProfile
-        profile.bindings[BindingKey(layer: .base, input: .buttonA, gesture: .doublePress)] = .internalCommand(.showDashboard)
+        profile.bindings[BindingKey(inputs: [.buttonA], gesture: .doublePress)] = .internalCommand(.showDashboard)
         var engine = GestureEngine()
-        XCTAssertTrue(engine.ingest(ControllerEvent(input: .buttonA, isPressed: true, timestamp: 0), profile: profile).isEmpty)
-        _ = engine.ingest(ControllerEvent(input: .buttonA, isPressed: false, timestamp: 0.05), profile: profile)
-        let second = engine.ingest(ControllerEvent(input: .buttonA, isPressed: true, timestamp: 0.15), profile: profile)
+        XCTAssertTrue(engine.ingest(.init(input: .buttonA, isPressed: true, timestamp: 0), profile: profile).isEmpty)
+        _ = engine.ingest(.init(input: .buttonA, isPressed: false, timestamp: 0.05), profile: profile)
+        let second = engine.ingest(.init(input: .buttonA, isPressed: true, timestamp: 0.15), profile: profile)
         XCTAssertEqual(second.map(\.gesture), [.doublePress])
     }
 
     func testSinglePressEmitsAfterDoubleWindow() {
         var profile = DefaultCatalog.legatoStyleProfile
-        profile.bindings[BindingKey(layer: .base, input: .buttonA, gesture: .doublePress)] = .internalCommand(.showDashboard)
+        profile.bindings[BindingKey(inputs: [.buttonA], gesture: .doublePress)] = .internalCommand(.showDashboard)
         var engine = GestureEngine()
-        _ = engine.ingest(ControllerEvent(input: .buttonA, isPressed: true, timestamp: 0), profile: profile)
-        _ = engine.ingest(ControllerEvent(input: .buttonA, isPressed: false, timestamp: 0.05), profile: profile)
+        _ = engine.ingest(.init(input: .buttonA, isPressed: true, timestamp: 0), profile: profile)
+        _ = engine.ingest(.init(input: .buttonA, isPressed: false, timestamp: 0.05), profile: profile)
         XCTAssertEqual(engine.tick(at: 0.30, profile: profile).map(\.gesture), [.press])
     }
 
@@ -83,6 +88,15 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(MIDIAddress.address(for: 511), MIDIAddress(channel: 4, note: 127))
     }
 
+    func testMIDIPitchesUseMusicalNames() {
+        XCTAssertEqual(MIDIAddress.noteName(for: 0), "C-1")
+        XCTAssertEqual(MIDIAddress.noteName(for: 59), "B3")
+        XCTAssertEqual(MIDIAddress.noteName(for: 60), "C4")
+        XCTAssertEqual(MIDIAddress.noteName(for: 61), "C♯4")
+        XCTAssertEqual(MIDIAddress.noteName(for: 127), "G9")
+        XCTAssertEqual(MIDIAddress(channel: 2, note: 61).displayName, "C♯4 · Channel 2")
+    }
+
     func testDynamicNoteAddressesAreReservedOutsideMIDILearnCatalog() {
         let catalogAddresses = Set((0..<512).map(MIDIAddress.address(for:)))
         XCTAssertFalse(catalogAddresses.contains(BridgeDynamicMIDI.placeSelectedNote))
@@ -91,11 +105,50 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(BridgeDynamicMIDI.isReserved(BridgeDynamicMIDI.placeSelectedNote))
     }
 
-    func testProfileRoundTrip() throws {
-        let data = try JSONEncoder().encode(DefaultCatalog.legatoStyleProfile)
-        let decoded = try JSONDecoder().decode(ControllerProfile.self, from: data)
-        XCTAssertEqual(decoded.name, DefaultCatalog.legatoStyleProfile.name)
-        XCTAssertEqual(decoded.bindings.count, DefaultCatalog.legatoStyleProfile.bindings.count)
+    func testExactBindingKeyIsOrderIndependent() {
+        XCTAssertEqual(
+            BindingKey(inputs: [.buttonA, .leftTrigger, .dpadLeft]),
+            BindingKey(inputs: [.dpadLeft, .buttonA, .leftTrigger])
+        )
+    }
+
+    func testLegacyBindingKeyJSONMigratesToExactInputSet() throws {
+        let data = Data(#"{"layer":"leftTrigger","input":"buttonA","gesture":"press"}"#.utf8)
+        let key = try JSONDecoder().decode(BindingKey.self, from: data)
+        XCTAssertEqual(key.inputs, [.leftTrigger, .buttonA])
+        XCTAssertFalse(key.pointerMode)
+        XCTAssertEqual(key.gesture, .press)
+    }
+
+    func testProfileRoundTripPreservesArbitraryCombinations() throws {
+        var original = DefaultCatalog.legatoStyleProfile
+        original.bindings[BindingKey(inputs: [.buttonA, .buttonB, .leftTrigger, .rightBumper])] = .typeText("custom")
+        let data = try JSONEncoder().encode(original)
+        XCTAssertEqual(try JSONDecoder().decode(ControllerProfile.self, from: data), original)
+    }
+
+    func testCapturedAndModifierOnlyShortcutsRoundTrip() throws {
+        let captured = KeyChord(capturedKeyCode: 20, characters: "#", modifiers: [.command, .shift])
+        let modifierOnly = KeyChord(modifiersOnly: [.control, .option, .function, .capsLock])
+        for chord in [captured, modifierOnly] {
+            let data = try JSONEncoder().encode(chord)
+            XCTAssertEqual(try JSONDecoder().decode(KeyChord.self, from: data), chord)
+        }
+        XCTAssertEqual(captured.displayName, "⇧ + ⌘ + #")
+        XCTAssertEqual(modifierOnly.displayName, "⌃ + ⌥ + fn + ⇪")
+    }
+
+    func testMixedActionSequenceRoundTrip() throws {
+        let original = CommandAction.sequence([
+            CommandStep(.keyChord(KeyChord(capturedKeyCode: 20, characters: "#", modifiers: [.command, .shift]))),
+            CommandStep(.typeText("hello"), delayMilliseconds: 75),
+            CommandStep(.midiPulse(MIDIAddress(channel: 2, note: 61)), delayMilliseconds: 125),
+            CommandStep(.pointer(.leftClick), delayMilliseconds: 10),
+            CommandStep(.menuPath(["Edit", "Delete"]), delayMilliseconds: 40)
+        ])
+        let data = try JSONEncoder().encode(original)
+        XCTAssertEqual(try JSONDecoder().decode(CommandAction.self, from: data), original)
+        XCTAssertEqual(original.summary, "Sequence (5 actions)")
     }
 
     func testControllerTextActionRoundTrip() throws {
@@ -106,12 +159,12 @@ final class CoreTests: XCTestCase {
 
     func testDefaultProfileUsesExactLegatoFaceAndStickClickLayout() {
         let profile = DefaultCatalog.legatoStyleProfile
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonA)), DefaultCatalog.action("place.note"))
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonB)), DefaultCatalog.action("cancel"))
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonX)), .controllerText(.ornamentsPopover))
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .buttonY)), .internalCommand(.showDashboard))
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .leftThumbstickButton)), DefaultCatalog.action("play"))
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .base, input: .rightThumbstickButton)), .pointer(.toggle))
+        XCTAssertEqual(profile.action(for: BindingKey(inputs: [.buttonA])), DefaultCatalog.action("place.note"))
+        XCTAssertEqual(profile.action(for: BindingKey(inputs: [.buttonB])), DefaultCatalog.action("cancel"))
+        XCTAssertEqual(profile.action(for: BindingKey(inputs: [.buttonX])), .controllerText(.ornamentsPopover))
+        XCTAssertEqual(profile.action(for: BindingKey(inputs: [.buttonY])), .internalCommand(.showDashboard))
+        XCTAssertEqual(profile.action(for: BindingKey(inputs: [.leftThumbstickButton])), DefaultCatalog.action("play"))
+        XCTAssertEqual(profile.action(for: BindingKey(inputs: [.rightThumbstickButton])), .pointer(.toggle))
     }
 
     func testSimpleActionsAreAvailableWithoutDoricoMenuScan() {
@@ -125,7 +178,13 @@ final class CoreTests: XCTestCase {
         }
     }
 
-    func testUniversalActionCatalogRemainsAvailableForAddMapping() {
+    func testMIDICatalogUsesNamesInsteadOfRawNoteLabels() {
+        let middleC = DefaultCatalog.actionByID["midi.slot.61"]
+        XCTAssertEqual(middleC?.title, "MIDI Learn C4 · Channel 1")
+        XCTAssertEqual(middleC?.detail, "Virtual MIDI C4 on channel 1")
+    }
+
+    func testUniversalActionCatalogRemainsAvailableForMapping() {
         let requiredIDs = [
             "access.focus.left", "access.focus.right", "access.focus.up", "access.focus.down",
             "access.press", "access.increment", "access.decrement", "access.menu",
@@ -134,16 +193,8 @@ final class CoreTests: XCTestCase {
             "pointer.scroll.up", "pointer.scroll.down", "pointer.scroll.left", "pointer.scroll.right"
         ]
         for id in requiredIDs {
-            XCTAssertNotNil(DefaultCatalog.actionByID[id], "Missing Add Mapping action: \(id)")
+            XCTAssertNotNil(DefaultCatalog.actionByID[id], "Missing mapping action: \(id)")
             XCTAssertNotEqual(DefaultCatalog.action(id), .none)
         }
-    }
-
-    func testBothBumpersHaveOnlyTheLegatoComboAction() {
-        let profile = DefaultCatalog.legatoStyleProfile
-        XCTAssertEqual(profile.action(for: BindingKey(layer: .bothBumpers, input: .rightBumper)), .internalCommand(.showDashboard))
-        XCTAssertNil(profile.action(for: BindingKey(layer: .bothBumpers, input: .buttonB)))
-        XCTAssertNil(profile.action(for: BindingKey(layer: .bothBumpers, input: .buttonX)))
-        XCTAssertNil(profile.action(for: BindingKey(layer: .bothBumpers, input: .buttonY)))
     }
 }
