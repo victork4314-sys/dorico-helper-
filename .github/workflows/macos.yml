@@ -15,27 +15,24 @@ jobs:
         run: |
           set -o pipefail
           swift test 2>&1 | tee swift-test.log
-      - name: Build native app
+      - name: Build Universal 2 app, ZIP, and DMG
         run: |
           set -o pipefail
-          swift build -c release 2>&1 | tee swift-build.log
-      - name: Package app bundle and DMG
-        run: |
-          chmod +x scripts/package-app.sh
-          scripts/package-app.sh .build/release/DoricoXboxBridge dist
-      - name: Upload compiler logs
+          SKIP_TESTS=1 BUILD_NUMBER="$GITHUB_RUN_NUMBER" bash scripts/build-app.sh 2>&1 | tee app-package.log
+      - name: Upload compiler and packaging logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: DoricoXboxBridge-compiler-logs
+          name: DoricoXboxBridge-build-logs
           path: |
             swift-test.log
-            swift-build.log
+            app-package.log
           if-no-files-found: ignore
-      - name: Upload native build
+      - name: Upload native app installers
         uses: actions/upload-artifact@v4
         with:
-          name: DoricoXboxBridge-macOS
+          name: DoricoXboxBridge-macOS-Universal
           path: |
-            dist/DoricoXboxBridge-macOS.zip
-            dist/DoricoXboxBridge-macOS.dmg
+            dist/Dorico-Xbox-Bridge-macOS-Universal.zip
+            dist/Dorico-Xbox-Bridge-macOS-Universal.dmg
+          if-no-files-found: error
