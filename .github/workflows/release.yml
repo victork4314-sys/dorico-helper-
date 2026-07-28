@@ -25,6 +25,10 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
 
+      - name: Verify release assets against the Mac-generated checksums
+        working-directory: release-assets
+        run: sha256sum --check SHA256SUMS.txt
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -38,7 +42,13 @@ jobs:
 
             **Recommended download:** `Dorico-Xbox-Bridge-macOS-Universal.dmg`
 
-            The app is Universal 2 and contains both Apple Silicon (`arm64`) and Intel (`x86_64`) code. It is ad-hoc signed, so macOS may require Control-click → Open on first launch. Grant Accessibility permission in System Settings → Privacy & Security → Accessibility.
+            Controller delivery has independent callback and 60 Hz polling paths, background-monitoring reassertion, app-switch and sleep/wake recovery, reconnect recovery, and a transport watchdog. The two paths share a deduplication gate so a physical press executes once.
+
+            The app is Universal 2 and contains both Apple Silicon (`arm64`) and Intel (`x86_64`) code. The ZIP is extracted and re-verified; the DMG is mounted and the contained app is re-verified. `SHA256SUMS.txt` and `BUILD-MANIFEST.txt` are attached to every release.
+
+            The app is ad-hoc signed, so macOS may require Control-click → Open on first launch. Grant Accessibility permission in System Settings → Privacy & Security → Accessibility.
           files: |
             release-assets/Dorico-Xbox-Bridge-macOS-Universal.dmg
             release-assets/Dorico-Xbox-Bridge-macOS-Universal.zip
+            release-assets/BUILD-MANIFEST.txt
+            release-assets/SHA256SUMS.txt
