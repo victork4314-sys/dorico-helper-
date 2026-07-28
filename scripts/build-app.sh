@@ -52,5 +52,21 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 ZIP="dist/Dorico-Xbox-Bridge-macOS-Universal.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
+DMG_ROOT="dist/dmg-root"
+DMG="dist/Dorico-Xbox-Bridge-macOS-Universal.dmg"
+mkdir -p "$DMG_ROOT"
+cp -R "$APP" "$DMG_ROOT/"
+ln -s /Applications "$DMG_ROOT/Applications"
+hdiutil create \
+  -volname "Dorico Xbox Bridge" \
+  -srcfolder "$DMG_ROOT" \
+  -ov \
+  -format UDZO \
+  "$DMG"
+rm -rf "$DMG_ROOT"
+
+hdiutil verify "$DMG"
+
 echo "Created $APP"
 echo "Created $ZIP"
+echo "Created $DMG"
