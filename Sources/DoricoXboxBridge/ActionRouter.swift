@@ -77,10 +77,9 @@ final class ActionRouter {
             model?.setPointerMode(!(model?.pointerMode ?? false))
         case .move(let dx, let dy):
             let scale = (model?.activeProfile.settings.pointerSpeed ?? 18) / 18
-            let current = NSEvent.mouseLocation
-            let screenHeight = NSScreen.screens.first?.frame.height ?? 0
-            let quartz = CGPoint(x: current.x + dx * scale, y: screenHeight - current.y + dy * scale)
-            CGWarpMouseCursorPosition(quartz)
+            let current = CGEvent(source: nil)?.location ?? .zero
+            let target = CGPoint(x: current.x + dx * scale, y: current.y - dy * scale)
+            CGWarpMouseCursorPosition(target)
         case .scroll(let dx, let dy):
             let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: Int32(dy), wheel2: Int32(dx), wheel3: 0)
             event?.post(tap: .cghidEventTap)
@@ -126,11 +125,11 @@ private enum KeyEmitter {
 
     static func type(_ text: String) {
         let source = CGEventSource(stateID: .combinedSessionState)
-        var units = Array(text.utf16)
+        let units = Array(text.utf16)
         let unitCount = units.count
         let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-        units.withUnsafeMutableBufferPointer { buffer in
+        units.withUnsafeBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return }
             down?.keyboardSetUnicodeString(stringLength: unitCount, unicodeString: base)
             up?.keyboardSetUnicodeString(stringLength: unitCount, unicodeString: base)
