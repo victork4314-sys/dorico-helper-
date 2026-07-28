@@ -132,7 +132,7 @@ public struct BindingResolver: Sendable {
                  .leftStickRight where emission.gesture == .press || emission.gesture == .repeatPress:
                 return .internalCommand(.helperRight)
             default:
-                break
+                return nil
             }
         }
 
