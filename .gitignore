@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+.DS_Store
+DoricoXboxBridge-macOS.zip
+artifact/
