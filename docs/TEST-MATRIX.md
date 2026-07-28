@@ -12,7 +12,7 @@ This matrix separates what CI can prove from what requires a licensed Dorico Pro
 - [x] Ad-hoc code-signing verification passes.
 - [x] ZIP packaging succeeds.
 - [x] DMG creation and `hdiutil verify` succeed.
-- [x] Mapping-layer precedence, B/back interception, repeat fallback, hold/double-press behavior, profile JSON round-trip, and MIDI addressing are unit-tested.
+- [x] Mapping-layer precedence, helper input isolation, B/back interception, repeat fallback, hold/double-press behavior, profile JSON round-trip, MIDI addressing, and universal fallback catalog coverage are unit-tested.
 
 ## Test environment record
 
@@ -46,7 +46,7 @@ Record these before manual validation:
 - [ ] Xbox controller connects over USB where supported.
 - [ ] A non-Xbox controller is ignored.
 - [ ] Connecting a second non-Xbox controller does not replace the Xbox controller.
-- [ ] Disconnecting the active Xbox controller clears held triggers, bumpers, and stick directions.
+- [ ] Disconnecting the active Xbox controller clears held triggers, bumpers, stick directions, pointer mode, capture state, and keyboard state.
 - [ ] Reconnecting restores control without restarting the bridge.
 - [ ] Battery percentage is shown when macOS supplies it.
 - [ ] Haptic test produces controller feedback.
@@ -94,7 +94,29 @@ Confirm press, release, remap capture, and diagnostic reporting where the operat
 - [ ] Repeat rate changes take effect.
 - [ ] Stick deadzone changes take effect.
 - [ ] Trigger threshold changes take effect.
+- [ ] Hold delay changes take effect.
+- [ ] Double-press window changes take effect.
 - [ ] Pointer speed changes take effect.
+
+## Xbox controller keyboard
+
+Test command search, arbitrary Dorico text, Jump Bar execution, and Jump Bar mapping:
+
+- [ ] The keyboard opens from Status and Commands without a physical keyboard.
+- [ ] D-pad and left stick move horizontally and vertically through every visible key.
+- [ ] Grid movement wraps without trapping the selected key.
+- [ ] A types the selected character.
+- [ ] B deletes one character when text is present.
+- [ ] B closes the keyboard when the text is empty.
+- [ ] X inserts a space.
+- [ ] Y changes between uppercase/music, lowercase, and symbols pages.
+- [ ] Either bumper changes the keyboard page.
+- [ ] Menu submits the entered text.
+- [ ] Right-stick click also submits the entered text.
+- [ ] View cancels the keyboard without executing text.
+- [ ] Uppercase, lowercase, digits, punctuation, flat, sharp, double-flat, and double-sharp characters render correctly.
+- [ ] Held directional movement repeats according to the active repeat settings.
+- [ ] Command search can be entered, changed, and cleared entirely through the Xbox keyboard.
 
 ## Mapping and profiles
 
@@ -116,6 +138,7 @@ Confirm press, release, remap capture, and diagnostic reporting where the operat
 
 - [ ] With frontmost-only enabled, commands do nothing when another app is frontmost.
 - [ ] With background activation enabled, the bridge activates Dorico before sending a command.
+- [ ] Controller keyboard submission hides the dashboard, activates Dorico, and sends text only after Dorico is frontmost.
 - [ ] No keyboard command is sent to Safari, Finder, Messages, or another unrelated app.
 - [ ] Dashboard A/B/D-pad input never leaks into Dorico while the dashboard is active.
 - [ ] Pointer mode is the only intentional global-pointer route.
@@ -160,16 +183,20 @@ Open, enter representative text through the controller keyboard or macro path, c
 - [ ] Clef
 - [ ] Playing techniques
 - [ ] Bars and barlines
-- [ ] Unicode text reaches Dorico without corruption.
+- [ ] Controller-entered Unicode text reaches Dorico without corruption.
 - [ ] B cancels an open popover.
 
 ## Jump Bar
 
-- [ ] Jump Bar opens from an Xbox mapping.
-- [ ] Commands mode opens.
-- [ ] Controller text entry can search for a command.
-- [ ] A executes the chosen command.
-- [ ] B closes the Jump Bar.
+- [ ] “Run a Dorico Jump Bar command” opens the Xbox keyboard.
+- [ ] Submitting hides the helper and activates Dorico.
+- [ ] Jump Bar opens with J.
+- [ ] Commands mode opens with Control-1 on macOS.
+- [ ] The entered controller text reaches the Jump Bar.
+- [ ] Return executes the command automatically after submission.
+- [ ] “Create a Jump Bar controller mapping” accepts text, then starts Xbox input capture.
+- [ ] The captured Xbox input runs the saved Jump Bar macro later.
+- [ ] B cancels keyboard entry and Dorico Escape closes an open Jump Bar.
 - [ ] Jump Bar option changes work where Dorico exposes them.
 
 ## Virtual MIDI Learn
@@ -202,10 +229,12 @@ Open, enter representative text through the controller keyboard or macro path, c
 - [ ] Movement wraps when no candidate exists in the requested direction.
 - [ ] Hidden controls are skipped.
 - [ ] Disabled/non-focusable decorative elements are skipped.
-- [ ] Press focused control works.
-- [ ] Increment/decrement works on sliders or steppers.
-- [ ] Show-menu works on pop-up controls.
-- [ ] Scan-next and scan-previous traverse the focused window.
+- [ ] LB + RB + B presses the focused accessible control.
+- [ ] LB + RB + Y increments sliders or steppers.
+- [ ] LB + RB + X decrements sliders or steppers.
+- [ ] LB + RB + Menu opens the focused control menu.
+- [ ] LB + RB + D-pad right scans next.
+- [ ] LB + RB + D-pad left scans previous.
 - [ ] Setup, Write, Engrave, Play, and Print each remain navigable.
 
 ## Pointer fallback
@@ -213,10 +242,12 @@ Open, enter representative text through the controller keyboard or macro path, c
 - [ ] Both bumpers + A toggles pointer mode.
 - [ ] Left stick moves the pointer in all directions.
 - [ ] Pointer speed setting changes movement distance.
-- [ ] Right stick scrolls vertically.
+- [ ] Right stick scrolls vertically and horizontally.
 - [ ] A left-clicks.
+- [ ] Y double-clicks.
 - [ ] X right-clicks.
 - [ ] B exits pointer mode.
+- [ ] Pointer direction remains correct on the primary display and on displays arranged above, below, left, and right.
 - [ ] Pointer remains within usable screen coordinates across multiple displays.
 - [ ] Pointer mode can operate a Dorico control not exposed through Accessibility.
 
@@ -226,6 +257,7 @@ Open, enter representative text through the controller keyboard or macro path, c
 - [ ] Rapidly alternate LT/RT layers 100 times without a stuck layer.
 - [ ] Disconnect while both triggers are held; reconnect and confirm base layer.
 - [ ] Open/close the dashboard 100 times.
+- [ ] Open, type, submit, and cancel the Xbox keyboard 100 times.
 - [ ] Scan Dorico menus repeatedly without duplicate growth or a crash.
 - [ ] Switch profiles repeatedly during Dorico playback.
 - [ ] Leave bridge and Dorico running for one hour without increasing input latency.
