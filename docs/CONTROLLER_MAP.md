@@ -15,6 +15,19 @@ This document is generated from the built-in `Dorico Pro — Legato style` profi
 - Right stick click: redo.
 - Right stick: spatial Accessibility focus.
 
+## Bridge dashboard
+
+- D-pad and left stick Up/Down: move in the visibly focused column.
+- Left: move from any content row to the sidebar.
+- Right or A on the sidebar: enter the selected section's content.
+- A on a content row: activate it.
+- B: cancel capture, return to Status, or hide the dashboard.
+- LB: decrease the focused adjustable value.
+- RB: increase the focused adjustable value.
+- View and Guide: hide the dashboard.
+
+The sidebar and content column are separate visible focus regions. Adjustable Settings rows cannot trap left/right movement because value changes use the bumpers instead.
+
 ## Hold LT
 
 - A: copy.
