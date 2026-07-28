@@ -202,6 +202,8 @@ public enum BridgeInternalCommand: String, Codable, Hashable, Sendable {
     case helperDown
     case helperLeft
     case helperRight
+    case helperDecrease
+    case helperIncrease
     case helperActivate
     case helperBack
     case toggleBridge
