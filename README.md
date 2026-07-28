@@ -2,6 +2,12 @@
 
 A native macOS accessibility companion for **Dorico Pro 6.1** that makes an Xbox controller a complete Dorico control surface.
 
+## Download
+
+### [Download Dorico Xbox Bridge for macOS — DMG](https://github.com/victork4314-sys/dorico-helper-/releases/latest/download/Dorico-Xbox-Bridge-macOS-Universal.dmg)
+
+[Download the app as a ZIP](https://github.com/victork4314-sys/dorico-helper-/releases/latest/download/Dorico-Xbox-Bridge-macOS-Universal.zip) · [View the latest release](https://github.com/victork4314-sys/dorico-helper-/releases/latest)
+
 This is not a generic controller-to-keyboard mapper. It combines Xbox-native input, Dorico key commands and popovers, Jump Bar command entry, virtual MIDI Learn, live Dorico menu discovery, spatial macOS Accessibility navigation, pointer control, macros, profiles, haptics, and a controller-operated dashboard.
 
 ## Current implementation
@@ -10,6 +16,7 @@ This is not a generic controller-to-keyboard mapper. It combines Xbox-native inp
 - A/B/X/Y, D-pad, bumpers, analog triggers, sticks, stick clicks, Menu, View, and Guide when macOS passes Guide events through.
 - Legato-style controller behavior: A activates, B backs out, movement is not panel-trapped, held layers are supported, pointer mode is always available, and every mapping/profile/settings screen is controllable from the pad.
 - Separate visible focus for the dashboard sidebar and content column, with directional movement that cannot be trapped by an adjustable Settings row.
+- A small non-interactive focus selector that outlines the accessible Dorico object or control currently reached by controller navigation. Selected child, row, or cell objects are preferred when Dorico exposes them; very large score areas use a compact labeled marker instead of covering the screen.
 - Default Dorico Pro profile with navigation, editing, playback, note input, documented duration keys, controller-written popovers, Jump Bar Commands/Go To entry, accessibility focus, and pointer layers.
 - A controller-operated two-dimensional text keyboard for Dorico fields, every default text-driven popover, Jump Bar, command search, and reusable mappings.
 - 512 virtual MIDI Learn slots across four MIDI channels, with room to expand to the full 2,048 channel/note address space.
@@ -17,11 +24,11 @@ This is not a generic controller-to-keyboard mapper. It combines Xbox-native inp
 - Spatial Accessibility focus that chooses the nearest control in the requested direction across the focused Dorico window.
 - JSON profile persistence, controller-safe import, and controller-safe export without native file-picker traps.
 - Automated coverage for routing layers, helper isolation, spatial dashboard controls, bumper adjustment, text routes, strict Dorico targeting, persistence, MIDI addressing, and universal fallbacks.
-- Native macOS CI testing, Universal 2 release building, app-bundle signing verification, ZIP packaging, and DMG packaging on every push.
+- Native macOS CI testing, Universal 2 release building, app-bundle signing verification, ZIP packaging, DMG packaging, and automatic publication to GitHub Releases after every successful `main` build.
 
 ## Install the app
 
-The macOS workflow produces both:
+The latest GitHub Release provides both:
 
 - `Dorico-Xbox-Bridge-macOS-Universal.dmg` — open it and drag **Dorico Xbox Bridge** to Applications.
 - `Dorico-Xbox-Bridge-macOS-Universal.zip` — contains the complete **Dorico Xbox Bridge.app** bundle.
