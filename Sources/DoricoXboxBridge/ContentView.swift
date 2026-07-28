@@ -18,6 +18,11 @@ struct ContentView: View {
                     .padding()
             }
         }
+        .overlay {
+            if model.controllerKeyboard.isVisible {
+                ControllerKeyboardView(keyboard: model.controllerKeyboard)
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -84,10 +89,19 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if model.selectedSection == .commands {
-                TextField("Search Dorico commands", text: $model.commandFilter)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 260)
+            if model.selectedSection == .commands, !model.commandFilter.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                    Text(model.commandFilter)
+                        .lineLimit(1)
+                    Text("Xbox filter")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.accentColor.opacity(0.14))
+                .clipShape(Capsule())
             }
             if model.selectedSection == .settings || model.selectedSection == .commands {
                 VStack(alignment: .trailing, spacing: 2) {
@@ -228,19 +242,19 @@ struct ContentView: View {
 
     private var sectionSubtitle: String {
         switch model.selectedSection {
-        case .status: "Connection, permissions, Dorico detection, and universal fallbacks"
+        case .status: "Connection, permissions, Dorico detection, controller text, and universal fallbacks"
         case .mappings: "Every active Xbox binding. Activate a row to remove it."
-        case .commands: "Select any built-in, MIDI Learn, or live Dorico menu command, then press an Xbox input to map it."
+        case .commands: "Search, create Jump Bar actions, or map any built-in, MIDI Learn, or live Dorico menu command."
         case .profiles: "Switch, duplicate, reset, import, and export complete controller layouts."
         case .settings: "Use left/right to adjust the selected value."
-        case .diagnostics: "Real controller, Dorico, Accessibility, MIDI, and routing state."
+        case .diagnostics: "Real controller, Dorico, Accessibility, MIDI, routing, and stuck-input state."
         }
     }
 
     private var emptyStateText: String {
         switch model.selectedSection {
         case .mappings: "Choose a command and capture an Xbox input to create a mapping."
-        case .commands: "Clear the search field or scan Dorico menus."
+        case .commands: "Clear the controller-entered search or scan Dorico menus."
         default: "No items are available."
         }
     }
