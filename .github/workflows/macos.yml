@@ -11,17 +11,31 @@ jobs:
       - uses: actions/checkout@v4
       - name: Swift version
         run: swift --version
-      - name: Test core
-        run: swift test
+      - name: Test core and compile native target
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee swift-test.log
       - name: Build native app
-        run: swift build -c release
+        run: |
+          set -o pipefail
+          swift build -c release 2>&1 | tee swift-build.log
       - name: Package executable
         run: |
           mkdir -p artifact
           cp .build/release/DoricoXboxBridge artifact/
           cp README.md artifact/
           ditto -c -k --sequesterRsrc --keepParent artifact DoricoXboxBridge-macOS.zip
-      - uses: actions/upload-artifact@v4
+      - name: Upload compiler logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DoricoXboxBridge-compiler-logs
+          path: |
+            swift-test.log
+            swift-build.log
+          if-no-files-found: ignore
+      - name: Upload native build
+        uses: actions/upload-artifact@v4
         with:
           name: DoricoXboxBridge-macOS
           path: DoricoXboxBridge-macOS.zip
