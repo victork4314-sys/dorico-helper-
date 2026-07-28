@@ -127,12 +127,13 @@ private enum KeyEmitter {
     static func type(_ text: String) {
         let source = CGEventSource(stateID: .combinedSessionState)
         var units = Array(text.utf16)
+        let unitCount = units.count
         let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)
         let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
         units.withUnsafeMutableBufferPointer { buffer in
             guard let base = buffer.baseAddress else { return }
-            down?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: base)
-            up?.keyboardSetUnicodeString(stringLength: units.count, unicodeString: base)
+            down?.keyboardSetUnicodeString(stringLength: unitCount, unicodeString: base)
+            up?.keyboardSetUnicodeString(stringLength: unitCount, unicodeString: base)
         }
         down?.post(tap: .cghidEventTap)
         up?.post(tap: .cghidEventTap)
