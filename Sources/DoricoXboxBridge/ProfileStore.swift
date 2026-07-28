@@ -1,7 +1,6 @@
 #if os(macOS)
 import AppKit
 import Foundation
-import UniformTypeIdentifiers
 import DoricoBridgeCore
 
 @MainActor
@@ -18,7 +17,13 @@ final class ProfileStore {
         return base.appendingPathComponent("DoricoXboxBridge", isDirectory: true)
     }
 
+    private var exchangeDirectoryURL: URL {
+        let base = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return base.appendingPathComponent("Dorico Xbox Bridge Profiles", isDirectory: true)
+    }
+
     private var profilesURL: URL { directoryURL.appendingPathComponent("profiles.json") }
+    private var exportedProfilesURL: URL { exchangeDirectoryURL.appendingPathComponent("Dorico-Xbox-Profiles.json") }
 
     func loadProfiles() -> [ControllerProfile] {
         guard let data = try? Data(contentsOf: profilesURL),
@@ -47,22 +52,39 @@ final class ProfileStore {
     }
 
     func exportProfiles(_ profiles: [ControllerProfile]) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Dorico-Xbox-Profiles.json"
-        panel.allowedContentTypes = [.json]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        if let data = try? encoder.encode(profiles) {
-            try? data.write(to: url, options: .atomic)
+        do {
+            try FileManager.default.createDirectory(at: exchangeDirectoryURL, withIntermediateDirectories: true)
+            let data = try encoder.encode(profiles)
+            try data.write(to: exportedProfilesURL, options: .atomic)
+        } catch {
+            NSSound.beep()
         }
     }
 
     func importProfiles() -> [ControllerProfile]? {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
-        panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url,
-              let data = try? Data(contentsOf: url) else { return nil }
-        return try? decoder.decode([ControllerProfile].self, from: data)
+        do {
+            try FileManager.default.createDirectory(at: exchangeDirectoryURL, withIntermediateDirectories: true)
+            let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey]
+            let files = try FileManager.default.contentsOfDirectory(
+                at: exchangeDirectoryURL,
+                includingPropertiesForKeys: Array(keys),
+                options: [.skipsHiddenFiles]
+            )
+            let candidates = files
+                .filter { $0.pathExtension.lowercased() == "json" }
+                .filter { (try? $0.resourceValues(forKeys: keys).isRegularFile) == true }
+                .sorted {
+                    let left = (try? $0.resourceValues(forKeys: keys).contentModificationDate) ?? .distantPast
+                    let right = (try? $1.resourceValues(forKeys: keys).contentModificationDate) ?? .distantPast
+                    return left > right
+                }
+            guard let newest = candidates.first else { return nil }
+            let data = try Data(contentsOf: newest)
+            return try decoder.decode([ControllerProfile].self, from: data)
+        } catch {
+            NSSound.beep()
+            return nil
+        }
     }
 }
 #endif
