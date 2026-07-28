@@ -84,4 +84,27 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(decoded.name, DefaultCatalog.legatoStyleProfile.name)
         XCTAssertEqual(decoded.bindings.count, DefaultCatalog.legatoStyleProfile.bindings.count)
     }
+
+    func testUniversalFallbackCatalogIsComplete() {
+        let requiredIDs = [
+            "access.focus.left", "access.focus.right", "access.focus.up", "access.focus.down",
+            "access.press", "access.increment", "access.decrement", "access.menu",
+            "access.scan.next", "access.scan.previous",
+            "pointer.toggle", "pointer.click", "pointer.double", "pointer.right",
+            "pointer.scroll.up", "pointer.scroll.down", "pointer.scroll.left", "pointer.scroll.right"
+        ]
+        for id in requiredIDs {
+            XCTAssertNotNil(DefaultCatalog.actionByID[id], "Missing universal fallback action: \(id)")
+            XCTAssertNotEqual(DefaultCatalog.action(id), .none)
+        }
+    }
+
+    func testBothBumpersProvideControllerOnlyAccessibilityFallback() {
+        let profile = DefaultCatalog.legatoStyleProfile
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .bothBumpers, input: .buttonB)), .accessibility(.pressFocused))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .bothBumpers, input: .buttonX)), .accessibility(.decrementFocused))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .bothBumpers, input: .buttonY)), .accessibility(.incrementFocused))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .bothBumpers, input: .dpadLeft)), .accessibility(.scanPrevious))
+        XCTAssertEqual(profile.action(for: BindingKey(layer: .bothBumpers, input: .dpadRight)), .accessibility(.scanNext))
+    }
 }
