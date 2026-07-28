@@ -37,6 +37,7 @@ final class ActionRouter {
         case .pointer(let operation):
             performPointer(operation)
         case .midiPulse(let address):
+            guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
             midi.sendPulse(address)
         case .keyChord(let chord):
             guard prepareDoricoTarget() else { throw RouterError.doricoNotRunning }
