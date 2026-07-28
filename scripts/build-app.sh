@@ -84,7 +84,7 @@ lipo "$DMG_VERIFY/Dorico Xbox Bridge.app/Contents/MacOS/DoricoXboxBridge" -verif
 hdiutil detach "$DMG_VERIFY" >/dev/null
 rmdir "$DMG_VERIFY"
 
-COMMIT_SHA="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+COMMIT_SHA="${SOURCE_COMMIT_SHA:-${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}}"
 cat > dist/BUILD-MANIFEST.txt <<EOF
 Dorico Xbox Bridge validated build
 Build number: $BUILD_NUMBER
