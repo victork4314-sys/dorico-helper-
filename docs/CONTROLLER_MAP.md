@@ -34,14 +34,22 @@ This document is generated from the built-in `Dorico Pro — Legato style` profi
 
 ## Hold LT + RT
 
-- A: dynamics popover.
-- B: ornaments popover.
-- X: time signature popover.
-- Y: key signature popover.
-- D-pad Up: tempo popover.
-- D-pad Down: clef popover.
-- D-pad Left: playing techniques popover.
-- D-pad Right: bars and barlines popover.
+Each shortcut opens the bridge's Xbox keyboard. Submitting returns to Dorico, opens the correct popover, enters the controller-written text, and confirms it.
+
+- A: dynamics.
+- B: ornaments.
+- X: time signature.
+- Y: key signature.
+- D-pad Up: tempo.
+- D-pad Down: clef.
+- D-pad Left: playing techniques.
+- D-pad Right: bars and barlines.
+
+## Hold LB
+
+- A: Xbox keyboard for the focused Dorico field or an already-open popover.
+- X: Xbox keyboard for Jump Bar Commands mode.
+- Y: Xbox keyboard for Jump Bar Go To mode.
 
 ## Hold LB + RB
 
@@ -64,12 +72,13 @@ This document is generated from the built-in `Dorico Pro — Legato style` profi
 
 ## Xbox controller keyboard
 
-- D-pad or left stick: move through the 2D character grid.
+- D-pad or left stick: move through the two-dimensional character grid.
 - A: type the selected character.
-- B: delete one character; close the keyboard when the text is empty.
-- X: insert a space.
+- B: cancel immediately, regardless of entered text.
+- X: erase the last character.
+- Select the Space key in the grid to enter a space.
 - Y, LB, or RB: change character page.
 - Menu or right stick click: submit.
 - View: cancel.
 
-The keyboard is available for command search, arbitrary Dorico text and popovers, immediate Jump Bar commands, and reusable Jump Bar controller mappings.
+The keyboard supports command search, focused Dorico text, all default text-driven popovers, immediate Jump Bar Commands and Go To entries, and reusable custom Jump Bar controller mappings.
