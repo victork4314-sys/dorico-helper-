@@ -15,7 +15,16 @@ This is not a generic controller-to-keyboard mapper. It combines Xbox-native inp
 - Spatial Accessibility focus that chooses the nearest control in the requested direction across the focused Dorico window.
 - JSON profile persistence, import, and export.
 - Unit tests for layer precedence, B/back behavior, repeat fallback, double-press handling, profile persistence, and MIDI addressing.
-- Native macOS CI build on every push.
+- Native macOS CI testing, release building, app-bundle signing verification, ZIP packaging, and DMG packaging on every push.
+
+## Install the app
+
+The macOS workflow produces both:
+
+- `DoricoXboxBridge-macOS.dmg` — open it and drag **Dorico Xbox Bridge** to Applications.
+- `DoricoXboxBridge-macOS.zip` — contains the complete **Dorico Xbox Bridge.app** bundle.
+
+The current development build is ad-hoc signed because the repository does not contain Apple Developer ID credentials. On first launch, macOS may require **Control-click → Open**. Accessibility permission is still granted normally in **System Settings → Privacy & Security → Accessibility**.
 
 ## Dorico MIDI Learn
 
@@ -33,9 +42,15 @@ Requirements:
 ```bash
 swift test
 swift build -c release
+chmod +x scripts/package-app.sh
+scripts/package-app.sh .build/release/DoricoXboxBridge dist
 ```
 
-The executable is created at `.build/release/DoricoXboxBridge`.
+The packager creates:
+
+- `dist/Dorico Xbox Bridge.app`
+- `dist/DoricoXboxBridge-macOS.zip`
+- `dist/DoricoXboxBridge-macOS.dmg`
 
 ## First launch
 
