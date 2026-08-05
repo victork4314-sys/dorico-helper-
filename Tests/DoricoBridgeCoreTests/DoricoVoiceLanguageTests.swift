@@ -117,4 +117,28 @@ final class DoricoVoiceLanguageTests: XCTestCase {
             XCTAssertTrue(hints.contains(descriptor.title), "Missing speech hint for \(descriptor.id)")
         }
     }
+
+    func testRuntimeContextualStringsNeverExceedAppleLimit() {
+        let hundreds = (0..<700).map { "Dorico action \($0)" }
+        let result = DoricoVoiceRuntimePolicy.contextualStrings(priority: [], fallback: hundreds)
+        XCTAssertEqual(result.count, DoricoVoiceRuntimePolicy.maximumContextualStrings)
+        XCTAssertEqual(result.first, "Dorico action 0")
+        XCTAssertEqual(result.last, "Dorico action 99")
+    }
+
+    func testRuntimeContextualStringsPrioritizeAndDeduplicateSetupTerms() {
+        let result = DoricoVoiceRuntimePolicy.contextualStrings(
+            priority: ["staccato", "C sharp", "STACCATO", "  fermata  "],
+            fallback: ["quarter note", "c sharp"],
+            limit: 4
+        )
+        XCTAssertEqual(result, ["staccato", "C sharp", "fermata", "quarter note"])
+    }
+
+    func testRuntimeAudioInputValidationRejectsFatalTapFormats() {
+        XCTAssertFalse(DoricoVoiceRuntimePolicy.isUsableAudioInput(sampleRate: 0, channelCount: 1))
+        XCTAssertFalse(DoricoVoiceRuntimePolicy.isUsableAudioInput(sampleRate: 48_000, channelCount: 0))
+        XCTAssertFalse(DoricoVoiceRuntimePolicy.isUsableAudioInput(sampleRate: .infinity, channelCount: 2))
+        XCTAssertTrue(DoricoVoiceRuntimePolicy.isUsableAudioInput(sampleRate: 48_000, channelCount: 1))
+    }
 }
