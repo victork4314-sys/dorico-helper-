@@ -26,6 +26,10 @@
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Dorico Xbox Bridge uses the microphone only while Voice Control is listening for notation and music commands.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Dorico Xbox Bridge uses speech recognition to turn spoken music terms into Dorico commands.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
