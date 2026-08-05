@@ -1,8 +1,8 @@
 #if os(macOS)
 import AppKit
 import AVFoundation
+import Combine
 import Speech
-import SwiftUI
 import DoricoBridgeCore
 
 @MainActor
@@ -13,10 +13,11 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
     @Published var status = "Voice control is off"
     @Published var requireDoricoPrefix = false
     @Published var showCommandReference = true
-    @Published var trainingTargetPhrase = ""
-    @Published private(set) var trainingSamples: [String] = []
-    @Published private(set) var isTraining = false
     @Published private(set) var aliasBook: DoricoVoiceAliasBook
+    @Published private(set) var calibrationProfile: DoricoVoiceCalibrationProfile
+    @Published private(set) var isCalibrating = false
+    @Published private(set) var calibrationPromptIndex = 0
+    @Published private(set) var calibrationSamples: [String] = []
 
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -28,6 +29,7 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
     private var isExecuting = false
     private var lastExecutedNormalizedText = ""
     private var lastExecutionTime = Date.distantPast
+    private var workingCalibration = DoricoVoiceCalibrationProfile()
 
     private let detector = DoricoDetector()
     private let accessibility = DoricoAccessibility()
@@ -36,10 +38,21 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
     private weak var model: AppModel?
 
     private static let aliasesDefaultsKey = "DoricoVoiceAliases.v1"
+    private static let calibrationDefaultsKey = "DoricoVoiceCalibration.v1"
+
+    var calibrationPromptTotal: Int { DoricoVoiceLanguage.calibrationPrompts.count }
+    var currentCalibrationPrompt: String {
+        guard calibrationPromptIndex < calibrationPromptTotal else { return "" }
+        return DoricoVoiceLanguage.calibrationPrompts[calibrationPromptIndex]
+    }
+    var voiceSetupComplete: Bool { calibrationProfile.isComplete }
+    var learnedCorrectionCount: Int { calibrationProfile.learnedCorrectionCount }
+    var supportedActionCount: Int { DoricoVoiceLanguage.supportedCatalogActionCount }
 
     init(model: AppModel) {
         self.model = model
         self.aliasBook = Self.loadAliasBook()
+        self.calibrationProfile = Self.loadCalibrationProfile()
         self.router = ActionRouter(
             detector: detector,
             accessibility: accessibility,
@@ -89,31 +102,38 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         isRestartingSession = false
         transcriptCommitTask?.cancel()
         cleanRecognitionSession()
-        status = isTraining ? "Voice training paused" : "Voice control is off"
+        if isCalibrating {
+            status = "Voice setup paused at phrase \(min(calibrationPromptIndex + 1, calibrationPromptTotal)) of \(calibrationPromptTotal)"
+        } else {
+            status = "Voice control is off"
+        }
     }
 
-    func beginTraining() {
-        let target = DoricoVoiceLanguage.normalize(trainingTargetPhrase)
-        guard !target.isEmpty else {
-            status = "Enter the Dorico command you want to teach first"
-            return
-        }
-        guard DoricoVoiceLanguage.canTeach(canonicalPhrase: target) else {
-            status = "That target is not a recognized Dorico music command yet"
-            return
-        }
-
-        trainingTargetPhrase = target
-        trainingSamples.removeAll()
-        isTraining = true
-        status = "Training 1 of 3: say “\(target)” naturally"
+    func beginVoiceSetup() {
+        workingCalibration = DoricoVoiceCalibrationProfile()
+        calibrationPromptIndex = 0
+        calibrationSamples.removeAll()
+        isCalibrating = true
+        status = "Voice setup 1 of \(calibrationPromptTotal): say the displayed phrase once"
         if !isListening { requestPermissionAndStart() }
     }
 
-    func cancelTraining() {
-        isTraining = false
-        trainingSamples.removeAll()
+    func cancelVoiceSetup() {
+        isCalibrating = false
+        calibrationPromptIndex = 0
+        calibrationSamples.removeAll()
+        workingCalibration = DoricoVoiceCalibrationProfile()
         status = isListening ? "Ready for Dorico music commands" : "Voice control is off"
+    }
+
+    func resetVoiceSetup() {
+        calibrationProfile.reset()
+        workingCalibration.reset()
+        calibrationPromptIndex = 0
+        calibrationSamples.removeAll()
+        Self.saveCalibrationProfile(calibrationProfile)
+        status = "Voice setup was removed"
+        restartRecognitionSession()
     }
 
     func removeLearnedPhrase(_ sample: String) {
@@ -124,7 +144,7 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
     func clearLearnedPhrases() {
         aliasBook.removeAll()
         saveAliasBook()
-        status = "All learned pronunciations were removed"
+        status = "All legacy command-specific pronunciations were removed"
     }
 
     private func beginRecognitionSession() {
@@ -146,7 +166,11 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         request.contextualStrings = Array(Set(
             DoricoVoiceLanguage.speechHints +
             aliasBook.aliases.keys +
-            aliasBook.aliases.values
+            aliasBook.aliases.values +
+            calibrationProfile.replacements.keys +
+            calibrationProfile.replacements.values +
+            workingCalibration.replacements.keys +
+            workingCalibration.replacements.values
         )).sorted()
         if #available(macOS 13.0, *) { request.addsPunctuation = true }
         recognitionRequest = request
@@ -168,9 +192,11 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
             return
         }
 
-        status = isTraining
-            ? "Training \(trainingSamples.count + 1) of 3: say “\(trainingTargetPhrase)” naturally"
-            : "Listening for Dorico music commands"
+        if isCalibrating {
+            status = "Voice setup \(calibrationPromptIndex + 1) of \(calibrationPromptTotal): say the displayed phrase once"
+        } else {
+            status = "Listening for every Dorico helper command"
+        }
 
         recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in
@@ -208,8 +234,8 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         let normalized = DoricoVoiceLanguage.normalize(rawText)
         guard !normalized.isEmpty else { return }
 
-        if isTraining {
-            captureTrainingSample(rawText)
+        if isCalibrating {
+            captureCalibrationSample(rawText)
             return
         }
 
@@ -222,18 +248,23 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         let commandText = normalized.hasPrefix("dorico ")
             ? String(normalized.dropFirst("dorico ".count))
             : normalized
+        let calibratedText = calibrationProfile.apply(to: commandText)
         let now = Date()
-        guard commandText != lastExecutedNormalizedText || now.timeIntervalSince(lastExecutionTime) > 1.4 else { return }
+        guard calibratedText != lastExecutedNormalizedText || now.timeIntervalSince(lastExecutionTime) > 1.4 else { return }
 
-        let batch = DoricoVoiceLanguage.parseBatch(commandText, aliases: aliasBook)
+        let batch = DoricoVoiceLanguage.parseBatch(
+            commandText,
+            aliases: aliasBook,
+            calibration: calibrationProfile
+        )
         guard !batch.commands.isEmpty else {
-            status = "No Dorico music command recognized"
-            model?.log("Voice not recognized: \(commandText)")
+            status = "No Dorico music or helper command recognized"
+            model?.log("Voice not recognized: \(calibratedText)")
             restartRecognitionSession()
             return
         }
 
-        lastExecutedNormalizedText = commandText
+        lastExecutedNormalizedText = calibratedText
         lastExecutionTime = now
         lastRecognizedCommand = batch.label
         status = "Running \(batch.commands.count) \(batch.commands.count == 1 ? "command" : "commands"): \(batch.label)"
@@ -251,7 +282,7 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
             }
             self.isExecuting = false
             if batch.unrecognizedSegments.isEmpty {
-                self.status = "Ready for the next Dorico music command"
+                self.status = "Ready for the next Dorico command"
             } else {
                 self.status = "Ran \(batch.commands.count); could not understand: \(batch.unrecognizedSegments.joined(separator: ", "))"
             }
@@ -259,23 +290,26 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         }
     }
 
-    private func captureTrainingSample(_ rawText: String) {
-        let sample = DoricoVoiceLanguage.normalize(rawText)
-        guard !sample.isEmpty else { return }
-        trainingSamples.append(sample)
+    private func captureCalibrationSample(_ rawText: String) {
+        guard calibrationPromptIndex < calibrationPromptTotal else { return }
+        let heard = DoricoVoiceLanguage.normalize(rawText)
+        guard !heard.isEmpty else { return }
 
-        if trainingSamples.count >= 3 {
-            aliasBook.teach(samples: trainingSamples, canonicalPhrase: trainingTargetPhrase)
-            saveAliasBook()
-            isTraining = false
-            let target = trainingTargetPhrase
-            trainingSamples.removeAll()
-            status = "Learned your pronunciation for “\(target)”"
+        let expected = DoricoVoiceLanguage.calibrationPrompts[calibrationPromptIndex]
+        workingCalibration.learn(expected: expected, heard: heard)
+        calibrationSamples.append(heard)
+        calibrationPromptIndex += 1
+
+        if calibrationPromptIndex >= calibrationPromptTotal {
+            calibrationProfile = workingCalibration
+            Self.saveCalibrationProfile(calibrationProfile)
+            isCalibrating = false
+            status = "Voice setup complete. \(learnedCorrectionCount) reusable pronunciation corrections learned."
             restartRecognitionSession()
             return
         }
 
-        status = "Training \(trainingSamples.count + 1) of 3: say “\(trainingTargetPhrase)” again"
+        status = "Voice setup \(calibrationPromptIndex + 1) of \(calibrationPromptTotal): say the next phrase once"
         restartRecognitionSession()
     }
 
@@ -315,6 +349,19 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         guard let data = try? JSONEncoder().encode(aliasBook) else { return }
         UserDefaults.standard.set(data, forKey: Self.aliasesDefaultsKey)
         objectWillChange.send()
+    }
+
+    private static func loadCalibrationProfile() -> DoricoVoiceCalibrationProfile {
+        guard let data = UserDefaults.standard.data(forKey: calibrationDefaultsKey),
+              let profile = try? JSONDecoder().decode(DoricoVoiceCalibrationProfile.self, from: data) else {
+            return DoricoVoiceCalibrationProfile()
+        }
+        return profile
+    }
+
+    private static func saveCalibrationProfile(_ profile: DoricoVoiceCalibrationProfile) {
+        guard let data = try? JSONEncoder().encode(profile) else { return }
+        UserDefaults.standard.set(data, forKey: calibrationDefaultsKey)
     }
 }
 #endif
