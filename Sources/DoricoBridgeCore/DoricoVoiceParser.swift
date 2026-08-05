@@ -1,8 +1,13 @@
 import Foundation
 
 public extension DoricoVoiceLanguage {
-    static func parseBatch(_ rawText: String, aliases: DoricoVoiceAliasBook = .init()) -> DoricoVoiceBatch {
-        let prepared = prepareSeparators(rawText)
+    static func parseBatch(
+        _ rawText: String,
+        aliases: DoricoVoiceAliasBook = .init(),
+        calibration: DoricoVoiceCalibrationProfile = .init()
+    ) -> DoricoVoiceBatch {
+        let calibrated = calibration.apply(to: rawText)
+        let prepared = prepareSeparators(calibrated)
         var commands: [DoricoVoiceCommand] = [], unknown: [String] = []
         for raw in prepared.split(separator: "|").map(String.init) {
             let segment = normalize(raw)
@@ -50,11 +55,16 @@ public extension DoricoVoiceLanguage {
         if let direct = directCommands[phrase] { return direct }
         if let duration = duration(phrase, fuzzy: false) { return duration }
         if let parameter = parameterCommand(phrase) { return parameter }
+        if let catalog = catalogCommand(phrase, fuzzy: false) { return catalog }
+        if let jumpBar = jumpBarCommand(phrase) { return jumpBar }
         guard fuzzy else { return nil }
         if let duration = duration(phrase, fuzzy: true) { return duration }
-        return directCommands.map { (similarity(phrase, $0.key), $0.value) }
+
+        let direct = directCommands.map { (similarity(phrase, $0.key), $0.value) }
             .filter { $0.0 >= ($0.1.canonicalPhrase.split(separator: " ").count <= 2 ? 0.76 : 0.80) }
             .max(by: { $0.0 < $1.0 })?.1
+        if let direct { return direct }
+        return catalogCommand(phrase, fuzzy: true)
     }
 
     static func stripFiller(_ phrase: String) -> String {
@@ -78,7 +88,7 @@ public extension DoricoVoiceLanguage {
         add(["cut","cut selection"], "Cut", "cut", .keyChord(KeyChord("x", modifiers: [.command])))
         add(["delete","delete selection","remove selection"], "Delete selection", "delete selection", .keyChord(KeyChord("delete")))
         add(["select all","select everything"], "Select all", "select all", .keyChord(KeyChord("a", modifiers: [.command])))
-        add(["start note input","begin note input","start writing notes"], "Start note input", "start note input", .keyChord(KeyChord("return")))
+        add(["start note input","begin note input","start writing notes"], "Start note input", "start note input", .keyChord(KeyChord("n", modifiers: [.shift])))
         add(["stop note input","end note input","exit note input"], "Stop note input", "stop note input", .keyChord(KeyChord("escape")))
         add(["play","start playback"], "Play", "play", .keyChord(KeyChord("space")))
         add(["stop","stop playback","pause playback"], "Stop", "stop", .keyChord(KeyChord("space")))
@@ -89,6 +99,8 @@ public extension DoricoVoiceLanguage {
         add(["previous staff","staff up"], "Previous staff", "previous staff", .keyChord(KeyChord("up")))
         add(["extend selection right","select right"], "Extend selection right", "extend selection right", .keyChord(KeyChord("right", modifiers: [.shift])))
         add(["extend selection left","select left"], "Extend selection left", "extend selection left", .keyChord(KeyChord("left", modifiers: [.shift])))
+        add(["extend selection up","select up"], "Extend selection up", "extend selection up", .keyChord(KeyChord("up", modifiers: [.shift])))
+        add(["extend selection down","select down"], "Extend selection down", "extend selection down", .keyChord(KeyChord("down", modifiers: [.shift])))
         add(["tie","add tie"], "Tie", "add tie", .keyChord(KeyChord("t")))
         add(["dot","dotted note","add dot"], "Toggle rhythm dot", "dotted note", .keyChord(KeyChord(".")))
         add(["rest","toggle rest","rest input"], "Toggle rest input", "rest", .keyChord(KeyChord(",")))
