@@ -99,6 +99,14 @@ struct ContentView: View {
                 Text(sectionSubtitle).foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                DoricoVoiceControlWindowController.shared.show(model: model)
+            } label: {
+                Label("Voice Control", systemImage: "mic.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityLabel("Open Dorico Voice Control")
             if model.selectedSection == .commands, !model.commandFilter.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "line.3.horizontal.decrease.circle.fill")

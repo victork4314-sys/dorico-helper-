@@ -9,9 +9,11 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-# This guard is intentionally independent of Swift tests. Packaging must stop
-# if any required controller-delivery backup is removed from the native target.
+# These guards are intentionally independent of Swift tests. Packaging must stop
+# if required controller delivery, mapping safety, or voice startup protection is removed.
 bash scripts/verify-controller-routing.sh
+bash scripts/verify-arbitrary-mappings.sh
+bash scripts/verify-voice-startup.sh
 
 if [[ "${SKIP_TESTS:-0}" != "1" ]]; then
   swift test
@@ -40,6 +42,11 @@ BUILD_NUMBER="${BUILD_NUMBER:-1}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CONTENTS/Info.plist"
 plutil -lint "$CONTENTS/Info.plist"
 
+MIC_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$CONTENTS/Info.plist")"
+SPEECH_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$CONTENTS/Info.plist")"
+[[ -n "$MIC_DESCRIPTION" ]] || { echo "Packaged app has no microphone usage description" >&2; exit 1; }
+[[ -n "$SPEECH_DESCRIPTION" ]] || { echo "Packaged app has no speech-recognition usage description" >&2; exit 1; }
+
 lipo -create "$ARM_BINARY" "$INTEL_BINARY" -output "$MACOS/DoricoXboxBridge"
 chmod 755 "$MACOS/DoricoXboxBridge"
 lipo "$MACOS/DoricoXboxBridge" -verify_arch arm64 x86_64
@@ -61,6 +68,8 @@ ZIP_VERIFY="$(mktemp -d)"
 ditto -x -k "$ZIP" "$ZIP_VERIFY"
 codesign --verify --deep --strict --verbose=2 "$ZIP_VERIFY/Dorico Xbox Bridge.app"
 lipo "$ZIP_VERIFY/Dorico Xbox Bridge.app/Contents/MacOS/DoricoXboxBridge" -verify_arch arm64 x86_64
+[[ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$ZIP_VERIFY/Dorico Xbox Bridge.app/Contents/Info.plist")" ]]
+[[ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$ZIP_VERIFY/Dorico Xbox Bridge.app/Contents/Info.plist")" ]]
 rm -rf "$ZIP_VERIFY"
 
 DMG_ROOT="dist/dmg-root"
@@ -81,6 +90,8 @@ DMG_VERIFY="$(mktemp -d)"
 hdiutil attach -nobrowse -readonly -mountpoint "$DMG_VERIFY" "$DMG" >/dev/null
 codesign --verify --deep --strict --verbose=2 "$DMG_VERIFY/Dorico Xbox Bridge.app"
 lipo "$DMG_VERIFY/Dorico Xbox Bridge.app/Contents/MacOS/DoricoXboxBridge" -verify_arch arm64 x86_64
+[[ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$DMG_VERIFY/Dorico Xbox Bridge.app/Contents/Info.plist")" ]]
+[[ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSSpeechRecognitionUsageDescription' "$DMG_VERIFY/Dorico Xbox Bridge.app/Contents/Info.plist")" ]]
 hdiutil detach "$DMG_VERIFY" >/dev/null
 rmdir "$DMG_VERIFY"
 
@@ -94,8 +105,9 @@ Swift: $(swift --version | head -n 1)
 Architectures: arm64 + x86_64
 Controller transport: GameController callbacks + 60 Hz direct polling backup
 Recovery: background reassertion + app-switch recovery + sleep/wake recovery + reconnect recovery + watchdog
-ZIP: tested, extracted, signature verified, architectures verified
-DMG: verified, mounted, signature verified, architectures verified
+Voice startup: privacy descriptions verified + contextual strings capped at 100 + microphone format guarded + tap lifecycle tracked
+ZIP: tested, extracted, signature verified, architectures verified, voice privacy metadata verified
+DMG: verified, mounted, signature verified, architectures verified, voice privacy metadata verified
 EOF
 
 (
