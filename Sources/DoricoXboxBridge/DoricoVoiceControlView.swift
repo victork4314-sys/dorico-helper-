@@ -15,7 +15,7 @@ struct DoricoVoiceControlView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Dorico Voice Control").font(.title2.weight(.semibold))
-                        Text("Write and edit music by speaking normal Dorico and music terms")
+                        Text("Speak normal music language or the name of any Dorico Helper action")
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -52,30 +52,64 @@ struct DoricoVoiceControlView: View {
                 Toggle("Require commands to begin with “Dorico”", isOn: $voice.requireDoricoPrefix)
                 Toggle("Show command examples", isOn: $voice.showCommandReference)
 
-                GroupBox("Teach your pronunciation") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Choose a Dorico command, then say it three times. The bridge remembers how your microphone and voice transcribe it.")
+                GroupBox("Set up your voice once") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Say five different phrases once each. The helper compares what macOS heard with the displayed music language, learns reusable pronunciation corrections, and applies them across every command. This is not command-by-command training.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        HStack {
-                            TextField("Command, for example: eighth note", text: $voice.trainingTargetPhrase)
-                                .textFieldStyle(.roundedBorder)
-                            Button(voice.isTraining ? "Cancel" : "Train 3 Times") {
-                                voice.isTraining ? voice.cancelTraining() : voice.beginTraining()
+                        if voice.isCalibrating {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Phrase \(voice.calibrationPromptIndex + 1) of \(voice.calibrationPromptTotal)")
+                                    .font(.headline)
+                                Text("“\(voice.currentCalibrationPrompt)”")
+                                    .font(.title3)
+                                    .textSelection(.enabled)
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color(nsColor: .controlBackgroundColor))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                Text("Say the whole phrase naturally once. A short pause submits it.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                ProgressView(
+                                    value: Double(voice.calibrationPromptIndex),
+                                    total: Double(voice.calibrationPromptTotal)
+                                )
+                                Button("Cancel Voice Setup") { voice.cancelVoiceSetup() }
+                            }
+                        } else {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(voice.voiceSetupComplete ? "Voice setup complete" : "Voice setup has not been completed")
+                                        .fontWeight(.semibold)
+                                    if voice.voiceSetupComplete {
+                                        Text("\(voice.learnedCorrectionCount) reusable corrections learned")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Button(voice.voiceSetupComplete ? "Run Setup Again" : "Set Up My Voice") {
+                                    voice.beginVoiceSetup()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                if voice.voiceSetupComplete {
+                                    Button("Reset", role: .destructive) { voice.resetVoiceSetup() }
+                                }
                             }
                         }
 
-                        if voice.isTraining {
-                            ProgressView(value: Double(voice.trainingSamples.count), total: 3)
-                            Text("Captured \(voice.trainingSamples.count) of 3 samples")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("The current helper catalog contains \(voice.supportedActionCount) voice-addressable actions. New named catalog actions automatically join voice control without a separate parser edit.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
                         if !voice.aliasBook.aliases.isEmpty {
-                            DisclosureGroup("Learned pronunciations (\(voice.aliasBook.aliases.count))") {
+                            DisclosureGroup("Legacy command-specific overrides (\(voice.aliasBook.aliases.count))") {
                                 VStack(alignment: .leading, spacing: 8) {
+                                    Text("These older phrase overrides still work, but the five-phrase voice setup replaces the need to train commands individually.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                     ForEach(voice.aliasBook.aliases.keys.sorted(), id: \.self) { sample in
                                         HStack {
                                             Text("“\(sample)” → “\(voice.aliasBook.aliases[sample] ?? "")”")
@@ -85,7 +119,7 @@ struct DoricoVoiceControlView: View {
                                                 .buttonStyle(.borderless)
                                         }
                                     }
-                                    Button("Remove all learned pronunciations", role: .destructive) {
+                                    Button("Remove all legacy overrides", role: .destructive) {
                                         voice.clearLearnedPhrases()
                                     }
                                 }
@@ -98,22 +132,23 @@ struct DoricoVoiceControlView: View {
 
                 if voice.showCommandReference {
                     VStack(alignment: .leading, spacing: 10) {
+                        commandGroup("Everything in the helper", "Say any action name shown in Mappings, such as pointer double-click, next accessible zone, increase accessible value, open command area, or MIDI Learn C sharp four channel one.")
                         commandGroup("Several commands at once", "quarter note, C sharp four, staccato · quaver then E flat three then tenuto")
                         commandGroup("Notes and rhythm", "eighth note or quaver · sixteenth note or semiquaver · dotted note · rest · chord mode · add tie")
                         commandGroup("Bars and movement", "add twenty-five bars · delete four bars · go left by a bar · move right three bars · go to bar thirty-two")
                         commandGroup("Dynamics and expression", "crescendo · diminuendo · dynamic fortissimo · staccato · tenuto · fermata · trill")
                         commandGroup("Score structure", "time signature three four · key signature E flat major · treble clef · tempo allegro")
-                        commandGroup("Editing", "undo · redo · delete selection · next note · previous staff · extend selection right · play")
+                        commandGroup("Any remaining Dorico command", "Say “Dorico command” followed by the command name to run it through Dorico’s Jump Bar command search.")
                     }
                 }
 
-                Text("The voice layer is Dorico-specific. It converts music language into Dorico’s own note-entry keys, popovers, navigation commands, and action sequences.")
+                Text("Voice first tries musician language, then every named Dorico Helper action, then the explicit Dorico Jump Bar fallback. All execution still uses the same checked ActionRouter as controller and keyboard mappings.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(20)
         }
-        .frame(minWidth: 700, minHeight: 660)
+        .frame(minWidth: 720, minHeight: 700)
         .onDisappear { voice.stopListening() }
     }
 
@@ -144,7 +179,7 @@ final class DoricoVoiceControlWindowController: NSObject, NSWindowDelegate {
         let hosting = NSHostingController(rootView: DoricoVoiceControlView(model: model))
         let window = NSWindow(contentViewController: hosting)
         window.title = "Dorico Voice Control"
-        window.setContentSize(NSSize(width: 780, height: 760))
+        window.setContentSize(NSSize(width: 820, height: 800))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.center()
         window.delegate = self
