@@ -18,6 +18,9 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
     @Published private(set) var isCalibrating = false
     @Published private(set) var calibrationPromptIndex = 0
     @Published private(set) var calibrationSamples: [String] = []
+    @Published private(set) var isRequestingPermissions = false
+    @Published private(set) var speechPermissionStatus = "Not requested"
+    @Published private(set) var microphonePermissionStatus = "Not requested"
 
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
@@ -27,6 +30,7 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
     private var sessionID = UUID()
     private var isRestartingSession = false
     private var isExecuting = false
+    private var inputTapInstalled = false
     private var lastExecutedNormalizedText = ""
     private var lastExecutionTime = Date.distantPast
     private var workingCalibration = DoricoVoiceCalibrationProfile()
@@ -64,23 +68,41 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
     }
 
     func toggleListening() {
+        guard !isRequestingPermissions else { return }
         isListening ? stopListening() : requestPermissionAndStart()
     }
 
     func requestPermissionAndStart() {
+        guard !isListening, !isRequestingPermissions else { return }
+        isRequestingPermissions = true
+        speechPermissionStatus = "Requesting"
+        status = "Requesting Speech Recognition permission"
+
         SFSpeechRecognizer.requestAuthorization { [weak self] speechStatus in
-            AVAudioApplication.requestRecordPermission { microphoneGranted in
-                Task { @MainActor in
-                    guard let self else { return }
-                    guard speechStatus == .authorized else {
-                        self.status = "Speech Recognition permission is required"
-                        return
+            Task { @MainActor in
+                guard let self else { return }
+                guard speechStatus == .authorized else {
+                    self.isRequestingPermissions = false
+                    self.speechPermissionStatus = Self.speechPermissionLabel(speechStatus)
+                    self.failVoiceStartup("Speech Recognition permission is required")
+                    return
+                }
+
+                self.speechPermissionStatus = "Granted"
+                self.microphonePermissionStatus = "Requesting"
+                self.status = "Requesting Microphone permission"
+
+                AVAudioApplication.requestRecordPermission { [weak self] microphoneGranted in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.isRequestingPermissions = false
+                        self.microphonePermissionStatus = microphoneGranted ? "Granted" : "Denied"
+                        guard microphoneGranted else {
+                            self.failVoiceStartup("Microphone permission is required")
+                            return
+                        }
+                        self.startListening()
                     }
-                    guard microphoneGranted else {
-                        self.status = "Microphone permission is required"
-                        return
-                    }
-                    self.startListening()
                 }
             }
         }
@@ -89,16 +111,19 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
     func startListening() {
         guard !isListening else { return }
         guard recognizer?.isAvailable == true else {
-            status = "Speech recognition is unavailable"
+            failVoiceStartup("Speech recognition is unavailable")
             return
         }
         isListening = true
-        beginRecognitionSession()
+        if !beginRecognitionSession() {
+            isListening = false
+        }
     }
 
     func stopListening() {
-        guard isListening else { return }
+        guard isListening || isRequestingPermissions else { return }
         isListening = false
+        isRequestingPermissions = false
         isRestartingSession = false
         transcriptCommitTask?.cancel()
         cleanRecognitionSession()
@@ -115,7 +140,11 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         calibrationSamples.removeAll()
         isCalibrating = true
         status = "Voice setup 1 of \(calibrationPromptTotal): say the displayed phrase once"
-        if !isListening { requestPermissionAndStart() }
+        if isListening {
+            restartRecognitionSession()
+        } else {
+            requestPermissionAndStart()
+        }
     }
 
     func cancelVoiceSetup() {
@@ -147,12 +176,12 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         status = "All legacy command-specific pronunciations were removed"
     }
 
-    private func beginRecognitionSession() {
-        guard isListening else { return }
+    @discardableResult
+    private func beginRecognitionSession() -> Bool {
+        guard isListening else { return false }
         guard recognizer?.isAvailable == true else {
-            isListening = false
-            status = "Speech recognition is unavailable"
-            return
+            failVoiceStartup("Speech recognition is unavailable")
+            return false
         }
 
         cleanRecognitionSession()
@@ -163,33 +192,35 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = recognizer?.supportsOnDeviceRecognition == true
         request.taskHint = .dictation
-        request.contextualStrings = Array(Set(
-            DoricoVoiceLanguage.speechHints +
-            aliasBook.aliases.keys +
-            aliasBook.aliases.values +
-            calibrationProfile.replacements.keys +
-            calibrationProfile.replacements.values +
-            workingCalibration.replacements.keys +
-            workingCalibration.replacements.values
-        )).sorted()
+        request.contextualStrings = DoricoVoiceRuntimePolicy.contextualStrings(
+            priority: priorityContextualStrings,
+            fallback: DoricoVoiceLanguage.speechHints
+        )
         if #available(macOS 13.0, *) { request.addsPunctuation = true }
         recognitionRequest = request
 
         let inputNode = audioEngine.inputNode
-        inputNode.removeTap(onBus: 0)
         let format = inputNode.outputFormat(forBus: 0)
+        guard DoricoVoiceRuntimePolicy.isUsableAudioInput(
+            sampleRate: format.sampleRate,
+            channelCount: format.channelCount
+        ) else {
+            recognitionRequest = nil
+            failVoiceStartup("No usable microphone input is available. Select a microphone in System Settings → Sound → Input, then try again.")
+            return false
+        }
+
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             request.append(buffer)
         }
+        inputTapInstalled = true
 
         do {
             audioEngine.prepare()
             try audioEngine.start()
         } catch {
-            inputNode.removeTap(onBus: 0)
-            isListening = false
-            status = "Microphone could not start: \(error.localizedDescription)"
-            return
+            failVoiceStartup("Microphone could not start: \(error.localizedDescription)")
+            return false
         }
 
         if isCalibrating {
@@ -211,6 +242,37 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
                 }
             }
         }
+        return true
+    }
+
+    private var priorityContextualStrings: [String] {
+        var priority: [String] = [
+            "Dorico", "quarter note", "eighth note", "sixteenth note", "quaver", "semiquaver",
+            "C sharp", "E flat", "staccato", "tenuto", "fermata", "crescendo", "diminuendo",
+            "fortissimo", "time signature", "key signature", "treble clef", "bass clef",
+            "add bars", "delete bars", "start playback", "stop playback", "MIDI Learn"
+        ]
+
+        if isCalibrating, !currentCalibrationPrompt.isEmpty {
+            priority.insert(currentCalibrationPrompt, at: 0)
+            let words = DoricoVoiceLanguage.normalize(currentCalibrationPrompt)
+                .split(separator: " ")
+                .map(String.init)
+            priority.append(contentsOf: words)
+            if words.count > 1 {
+                for index in 0..<(words.count - 1) {
+                    priority.append(words[index] + " " + words[index + 1])
+                }
+            }
+        }
+
+        priority.append(contentsOf: calibrationProfile.replacements.keys)
+        priority.append(contentsOf: calibrationProfile.replacements.values)
+        priority.append(contentsOf: workingCalibration.replacements.keys)
+        priority.append(contentsOf: workingCalibration.replacements.values)
+        priority.append(contentsOf: aliasBook.aliases.keys)
+        priority.append(contentsOf: aliasBook.aliases.values)
+        return priority
     }
 
     private func scheduleUtterance(_ text: String, isFinal: Bool) {
@@ -323,18 +385,47 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
             guard let self, self.isListening else { return }
             self.isRestartingSession = false
             self.transcript = ""
-            self.beginRecognitionSession()
+            _ = self.beginRecognitionSession()
         }
     }
 
     private func cleanRecognitionSession() {
         transcriptCommitTask?.cancel()
         if audioEngine.isRunning { audioEngine.stop() }
-        audioEngine.inputNode.removeTap(onBus: 0)
+        if inputTapInstalled {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            inputTapInstalled = false
+        }
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionRequest = nil
         recognitionTask = nil
+    }
+
+    private func failVoiceStartup(_ message: String) {
+        isListening = false
+        isRestartingSession = false
+        cleanRecognitionSession()
+        if isCalibrating {
+            isCalibrating = false
+            workingCalibration = DoricoVoiceCalibrationProfile()
+            calibrationPromptIndex = 0
+            calibrationSamples.removeAll()
+            status = "Voice setup could not start: \(message)"
+        } else {
+            status = message
+        }
+        model?.log("Voice startup stopped safely: \(message)")
+    }
+
+    private static func speechPermissionLabel(_ authorization: SFSpeechRecognizerAuthorizationStatus) -> String {
+        switch authorization {
+        case .authorized: "Granted"
+        case .denied: "Denied"
+        case .restricted: "Restricted"
+        case .notDetermined: "Not requested"
+        @unknown default: "Unavailable"
+        }
     }
 
     private static func loadAliasBook() -> DoricoVoiceAliasBook {
@@ -361,7 +452,7 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
 
     private static func saveCalibrationProfile(_ profile: DoricoVoiceCalibrationProfile) {
         guard let data = try? JSONEncoder().encode(profile) else { return }
-        UserDefaults.standard.set(data, forKey: calibrationDefaultsKey)
+        UserDefaults.standard.set(data, forKey: Self.calibrationDefaultsKey)
     }
 }
 #endif
