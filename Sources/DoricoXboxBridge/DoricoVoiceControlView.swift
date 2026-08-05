@@ -24,6 +24,7 @@ struct DoricoVoiceControlView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.space, modifiers: [.command, .shift])
+                    .disabled(voice.isRequestingPermissions)
                 }
 
                 HStack(spacing: 10) {
@@ -41,6 +42,31 @@ struct DoricoVoiceControlView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(nsColor: .controlBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                GroupBox("Permissions") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Label("Speech Recognition: \(voice.speechPermissionStatus)", systemImage: "captions.bubble")
+                            Spacer()
+                            Label("Microphone: \(voice.microphonePermissionStatus)", systemImage: "mic")
+                        }
+                        .font(.callout)
+
+                        Text("macOS adds Dorico Xbox Bridge to Privacy & Security only after the permission request reaches the system. Press Set Up My Voice or Start Listening to request both permissions.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        HStack {
+                            Button("Open Microphone Settings") {
+                                openPrivacyPane("Privacy_Microphone")
+                            }
+                            Button("Open Speech Recognition Settings") {
+                                openPrivacyPane("Privacy_SpeechRecognition")
+                            }
+                        }
+                    }
+                    .padding(4)
+                }
 
                 GroupBox("Live transcript") {
                     Text(voice.transcript.isEmpty ? "Your speech will appear here." : voice.transcript)
@@ -69,7 +95,9 @@ struct DoricoVoiceControlView: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(Color(nsColor: .controlBackgroundColor))
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                                Text("Say the whole phrase naturally once. A short pause submits it.")
+                                Text(voice.isRequestingPermissions
+                                     ? "Waiting for macOS permission prompts."
+                                     : "Say the whole phrase naturally once. A short pause submits it.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 ProgressView(
@@ -94,6 +122,7 @@ struct DoricoVoiceControlView: View {
                                     voice.beginVoiceSetup()
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .disabled(voice.isRequestingPermissions)
                                 if voice.voiceSetupComplete {
                                     Button("Reset", role: .destructive) { voice.resetVoiceSetup() }
                                 }
@@ -161,6 +190,11 @@ struct DoricoVoiceControlView: View {
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func openPrivacyPane(_ pane: String) {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") else { return }
+        NSWorkspace.shared.open(url)
     }
 }
 
