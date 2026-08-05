@@ -38,15 +38,17 @@ jobs:
           make_latest: true
           fail_on_unmatched_files: true
           body: |
-            Native macOS controller bridge for Dorico Pro 6.1 and Xbox controllers.
+            Native macOS accessibility bridge for Dorico Pro 6.1, Xbox controllers, and Dorico-specific natural-language voice control.
 
             **Recommended download:** `Dorico-Xbox-Bridge-macOS-Universal.dmg`
+
+            Voice control includes one-time five-phrase calibration, automatic indexing of every helper action, multi-command music-language input, guarded fuzzy matching, and explicit Dorico Jump Bar command fallback.
 
             Controller delivery has independent callback and 60 Hz polling paths, background-monitoring reassertion, app-switch and sleep/wake recovery, reconnect recovery, and a transport watchdog. The two paths share a deduplication gate so a physical press executes once.
 
             The app is Universal 2 and contains both Apple Silicon (`arm64`) and Intel (`x86_64`) code. The ZIP is extracted and re-verified; the DMG is mounted and the contained app is re-verified. `SHA256SUMS.txt` and `BUILD-MANIFEST.txt` are attached to every release.
 
-            The app is ad-hoc signed, so macOS may require Control-click → Open on first launch. Grant Accessibility permission in System Settings → Privacy & Security → Accessibility.
+            The app is ad-hoc signed, so macOS may require Control-click → Open on first launch. Grant Accessibility permission in System Settings → Privacy & Security → Accessibility. Voice control also requires Microphone and Speech Recognition permission.
           files: |
             release-assets/Dorico-Xbox-Bridge-macOS-Universal.dmg
             release-assets/Dorico-Xbox-Bridge-macOS-Universal.zip
