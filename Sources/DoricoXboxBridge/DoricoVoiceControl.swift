@@ -50,12 +50,6 @@ final class DoricoVoiceControl: NSObject, ObservableObject {
         midi.start()
     }
 
-    deinit {
-        transcriptCommitTask?.cancel()
-        audioEngine.stop()
-        recognitionTask?.cancel()
-    }
-
     func toggleListening() {
         isListening ? stopListening() : requestPermissionAndStart()
     }
