@@ -18,6 +18,9 @@ struct DoricoXboxBridgeApp: App {
             Button(model.dashboardVisible ? "Hide Dashboard" : "Show Dashboard") {
                 model.toggleDashboard()
             }
+            Button("Dorico Voice Control…") {
+                model.showVoiceControl()
+            }
             Button(model.bridgeEnabled ? "Disable Bridge" : "Enable Bridge") {
                 model.bridgeEnabled.toggle()
             }
